@@ -1,0 +1,10 @@
+Run dcam_gui.py to use the full dcam_gui
+
+Need to have Python3 installed as well as the following packages:
+PyQt5
+pyqtgraph
+numpy
+h5py
+astropy
+pyzmq
+orjson

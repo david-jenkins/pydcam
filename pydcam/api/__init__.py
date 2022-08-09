@@ -1,0 +1,21 @@
+
+from pydcam.api.dcam import Dcamapi, Dcam
+
+class OpenCamera:
+    def __init__(self, iDevice):
+        self.iDevice = iDevice
+
+    def __enter__(self):
+        if Dcamapi.init() is None:
+            raise Exception(f"Dcamapi.init() fails with error {Dcamapi.lasterr()}")
+        self.dcam = Dcam(self.iDevice)
+        if self.dcam.dev_open() is False:
+            print("No Camera available")
+            raise Exception(f"Dcam.dev_open() fails with error {self.dcam.lasterr().name}")
+        return self.dcam
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        print("Closing camera handle")
+        self.dcam.dev_close()
+        print("Closing the Dcamapi")
+        Dcamapi.uninit()

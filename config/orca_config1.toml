@@ -1,0 +1,19 @@
+
+
+# config for the ORCA Fusion BT
+# see orca_raw_properties.toml for more information about the parameters
+# the keys need to match the enums in DCAM_IDPROP in dcamapi4.py
+
+
+BINNING = 1.0 # no binning
+DEFECTCORRECT_MODE = 2.0 # on? I guess
+EXPOSURETIME = 0.5 # in seconds
+HOTPIXELCORRECT_LEVEL = 1.0 # on? I guess
+IMAGE_PIXELTYPE = 2 # 2 bytes per pixel, uint16
+READOUTSPEED = 2.0 # i think this is the normal read-out speed?
+
+SUBARRAYMODE = 2 # corresponds to mode on, 1 is off
+SUBARRAYHPOS = 0
+SUBARRAYHSIZE = 500
+SUBARRAYVPOS = 0
+SUBARRAYVSIZE = 500

@@ -1,0 +1,22 @@
+
+
+# config for the Flash
+# see flash_raw_properties.toml for more information about the parameters
+# the keys need to match the enums in DCAM_IDPROP in dcamapi4.py
+
+
+SENSORMODE = 1.0
+READOUTSPEED = 2.0
+BITPERCHANNEL = 16.0
+TRIGGERSOURCE = 1.0
+TRIGGERMODE = 1.0
+EXPOSURETIME=0.1
+DEFECTCORRECTMODE = 2.0
+HOTPIXELCORRECTLEVEL=1.0
+BINNING = 1.0
+
+SUBARRAYMODE=2.0
+SUBARRAYHPOS =  0.0
+SUBARRAYHSIZE = 2048.0
+SUBARRAYVPOS = 0.0
+SUBARRAYVSIZE = 2048.0
