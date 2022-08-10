@@ -16,9 +16,10 @@ import pyqtgraph as pg
 
 from functools import partial
 
-import pathlib
+from pathlib import Path
 
-from pydcam.dcam_display import zmq_reader, ImageDisplay
+from pydcam.dcam_display import ImageDisplay
+from pydcam.utils.zmq_pubsub import zmq_reader
 
 def my_wait(secs,start_time=None):
     if start_time is None:
@@ -126,10 +127,11 @@ class ImageViewer(QtW.QWidget):
             self.image.image.play(0)
 
 class CamSaver(QtW.QWidget):
-    def __init__(self, get_one_func, get_multi_func=None):
+    def __init__(self, get_one_func, get_multi_func=None, get_exp_func=None):
         super().__init__()
         self.get_one_callback = get_one_func
         self.get_multiple_callback = get_multi_func
+        self.get_exp_func = get_exp_func
 
         self.mainlayout = QtW.QVBoxLayout()
         self.setLayout(self.mainlayout)
@@ -176,7 +178,10 @@ class CamSaver(QtW.QWidget):
 
         self.exptimelabel = QtW.QLabel("Exposure Time for hdf5 files:")
         self.exptime = QtW.QDoubleSpinBox()
+        self.exptime.setDecimals(10)
         self.exptime.setValue(0.5)
+        self.getexptimebutton = QtW.QPushButton("Get Exposure Time")
+        self.getexptimebutton.clicked.connect(self.get_exp_time)
 
         self.statuslabel = QtW.QLabel("Initialising...")
 
@@ -195,6 +200,8 @@ class CamSaver(QtW.QWidget):
         self.savelayoutbottom = QtW.QHBoxLayout()
         self.savelayoutbottom.addWidget(self.exptimelabel)
         self.savelayoutbottom.addWidget(self.exptime)
+        if self.get_exp_func is not None:
+            self.savelayoutbottom.addWidget(self.getexptimebutton)
 
         self.mainlayout.addLayout(self.savelayouttop)
         self.mainlayout.addLayout(self.savelayoutmiddle)
@@ -221,10 +228,14 @@ class CamSaver(QtW.QWidget):
 
         self.can_save = lambda: True
 
-        self.dir_path = "./saved_images/"
-        pathlib.Path(self.dir_path).mkdir(exist_ok=True)
+        self.dir_path = Path.home()/"Hamamatsu_images"
+        self.dir_path.mkdir(exist_ok=True)
         self.update_filenamepreview()
         self.statuslabel.setText("Ready")
+
+    def get_exp_time(self):
+        exp_time = self.get_exp_func()
+        self.exptime.setValue(exp_time)
 
     def toggletimestep(self,value):
         self.timestep.setEnabled(not value)
@@ -276,7 +287,7 @@ class CamSaver(QtW.QWidget):
 
     def filedialogbutton_callback(self,event):
         # fname = QtG.QFileDialog.getOpenFileName(self, 'Open file', 'darc_images',"Image files (*.FITS *.hdf5)")
-        self.dir_path = QtW.QFileDialog.getExistingDirectory(self, 'Select directory')
+        self.dir_path = QtW.QFileDialog.getExistingDirectory(self, 'Select Dave Directory',str(Path.home()))
         self.update_filenamepreview()
 
     def update_filenamepreview(self):
@@ -354,7 +365,7 @@ class CamSaver(QtW.QWidget):
             self.imdisplay.show()
 
     def openfile(self):
-        fname = QtW.QFileDialog.getOpenFileName(self, 'Open file', 'darc_images',"Image files (*.FITS *.hdf5)",options=QtW.QFileDialog.DontUseNativeDialog)
+        fname = QtW.QFileDialog.getOpenFileName(self, 'Open file', self.dir_path, "Image files (*.FITS *.hdf5)",options=QtW.QFileDialog.DontUseNativeDialog)
         if fname == ('',''):
             return
         fext = fname[0].split(".")[-1]

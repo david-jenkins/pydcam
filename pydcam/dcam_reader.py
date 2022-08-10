@@ -8,28 +8,17 @@
     This imports some common functions, makes some common defines and implements some of
     the C++ examples from the DCAM SDK4.
 """
+from pathlib import Path
 import sys
 from pydcam.api.dcam import *
 import pydcam.api.dcam_extra as dapi
 
-import zmq
-import orjson
-import struct
 import time
 import threading
 import numpy
-from collections import deque
-from functools import partial
 from pydcam.utils.numpy_circ_buf import thread_buf
+from pydcam.utils.cb_thread import CallbackThread
 
-
-CHARLEN = struct.calcsize('!B')
-pack_char = partial(struct.pack, '!B')
-unpack_char = partial(struct.unpack, '!B')
-
-DOUBLELEN = struct.calcsize('!d')
-pack_double = partial(struct.pack, '!d')
-unpack_double = partial(struct.unpack, '!d')
 
 def my_wait(secs,start_time=None):
     if start_time is None:
@@ -46,157 +35,17 @@ def busy_wait(secs,start_time=None):
     while time.time() < start_time + secs:
         pass
 
-def pack_numpy(array):
-    header = orjson.dumps((str(array.dtype),array.shape))
-    message = bytearray(pack_char(len(header)) + header)
-    message.extend(array.tobytes())
-    return message
-
-def unpack_numpy(msg):
-    raw_msglen = msg[:CHARLEN]
-    msglen = unpack_char(raw_msglen)[0]
-    array_info = orjson.loads(msg[CHARLEN:CHARLEN+msglen])
-    array = numpy.frombuffer(msg[CHARLEN+msglen:],dtype=array_info[0])
-    array.shape = array_info[1]
-    return array
-
-def extend_timestamp(buffer):
-    out_buf = bytearray(pack_double(time.time()))
-    buffer.extend(out_buf)
-    return buffer
-
-def prepend_timestamp(buffer):
-    out_buf = bytearray(pack_double(time.time()))
-    out_buf.extend(buffer)
-    return out_buf
-
-def strip_timestamp(buffer):
-    return buffer[DOUBLELEN:], unpack_double(buffer[:DOUBLELEN])[0]
-
-class zmq_publisher():
-    def __init__(self, ip="127.0.0.1", port=5556, topic='orca'):
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PUB)
-        self.socket.bind(f"tcp://{ip}:{port}")
-        self.topic = topic.encode()
-
-    def publish(self, data):
-        to_send = extend_timestamp(bytearray(self.topic))
-        to_send.extend(pack_numpy(data))
-        self.socket.send(to_send)
-        
-    def close(self):
-        self.socket.close()
-
-class pub_thread(threading.Thread):
+class pub_thread(CallbackThread):
     def __init__(self, src_buf:thread_buf, ratelimit=0):
-        super().__init__()
-
+        super().__init__(startpaused=True, ratelimit=ratelimit)
         self.src_buf = src_buf
-        self.ratelimit = ratelimit
-        self.now = time.time()
 
-        self.callbacks = {}
-        self._go = True
-        self._pause = True
-
-        self.wait_while_paused = threading.Event()
-        self.wait_while_paused.clear()
-        self.wait_until_paused = threading.Event()
-        self.wait_until_paused.set()
-
-    def run(self):
-        while(self._go):
-            if self._pause:
-                self.wait_until_paused.set()
-                self.wait_while_paused.wait()
-                self.wait_until_paused.clear()
-            if not self._go:
-                return
-            buf = self.src_buf.get_latest(block=1, copy=1)
-            self.call_callbacks(buf)
-
-    def pause(self):
-        self.wait_while_paused.clear()
-        self._pause = True
-        self.wait_until_paused.wait()
-
-    def unpause(self):
-        self.wait_while_paused.set()
+    def get_data(self):
+        return self.src_buf.get_latest(block=1, copy=1)
 
     def stop(self):
-        self._go = False
-        self.unpause()
+        super().stop()
         self.src_buf.cancel_wait()
-
-    def call_callbacks(self, buf):
-        if buf is not None:
-            if self.ratelimit:
-                if time.time()-self.now > 1/self.ratelimit:
-                    self.now = time.time()
-                else:
-                    return
-            for fid in list(self.callbacks):
-                func = self.callbacks[fid]
-                try:
-                    func(buf)
-                except Exception as e:
-                    print(e)
-                    self.callbacks.pop(fid)
-            # todel = []
-            # for fid, func in self.callbacks.items():
-            #     try:
-            #         func(buf)
-            #     except Exception as e:
-            #         print(e)
-            #         todel.append(fid)
-            # for fid in todel:
-            #     self.callbacks.pop(fid, None)
-
-    def register(self, func):
-        fid = str(id(func))
-        self.callbacks[fid] = func
-        return fid
-    
-    def deregister(self, fid):
-        self.callbacks.pop(fid, None)
-
-    def oneshot(self):
-        ready = threading.Event()
-        def func(data):
-            self.oneshot_data = data
-            ready.set()
-        self.oneshot_callback(func)
-        ready.wait()
-        return self.oneshot_data
-
-    def oneshot_callback(self, func):
-        def wrapper(data):
-            func(data)
-            raise Exception()
-        self.register(wrapper)
-
-    def multishot(self, n):
-        ready = threading.Event()
-        self.multishot_return = deque()
-        def func(data, done):
-            self.multishot_return.append(data)
-            if done:
-                ready.set()
-        self.multishot_callback(func, n)
-        ready.wait()
-        return self.multishot_return
-
-    def multishot_callback(self, func, n):
-        cnt = [0]
-        def wrapper(data):
-            test = (cnt[0] >= n - 1)
-            func(data, test)
-            if test:
-                raise Exception()
-            cnt[0] += 1
-        self.register(wrapper)
-
 
 class cam_thread(threading.Thread):
     def __init__(self, dcam:Dcam, dst_buf:thread_buf):
@@ -485,6 +334,9 @@ class DCamReader():
         fValue = exp_time
         ret = self.dcam.prop_setgetvalue(idprop, fValue, verbose=True)
 
+    def get_exposure(self):
+        return self.dcam.prop_getvalue(DCAM_IDPROP.EXPOSURETIME)
+
     def set_subarray_pos(self, hpos, vpos):
 
         ret = self.dcam.prop_getvalue(DCAM_IDPROP.SUBARRAYMODE)
@@ -746,17 +598,22 @@ class DCamSim():
 if __name__ == "__main__":
     from pydcam import open_config
     from pydcam.api import OpenCamera
+    from pydcam.utils.zmq_pubsub import zmq_publisher
     iDevice = 0
 
-    CONF_FILE = "orca_config1.toml"
+    fname = None
+    if len(sys.argv) > 1:
+        fname = Path(sys.argv[1]).resolve()
 
     with OpenCamera(iDevice) as dcam:
 
         dcam.prop_setdefaults()
-        init_dict = open_config(CONF_FILE)
-        dcam.prop_setfromdict(init_dict)
 
         dcam.prop_setvalue(DCAM_IDPROP.EXPOSURETIME,1.0)
+
+        if fname is not None:
+            init_dict = open_config(fname)
+            if init_dict: dcam.prop_setfromdict(init_dict)
 
         camreader = DCamReader(dcam)
         this_zmq = zmq_publisher()
@@ -766,7 +623,7 @@ if __name__ == "__main__":
 
         while 1:
             try:
-                x = input("Type: exp X\nwhere X is the exposure time:\n")
+                x = input("Type exp X, where X is the exposure time:\nor type config to configure from file:\n")
                 if x[:3] == "exp":
                     try:
                         et = float(x[4:])
@@ -774,6 +631,9 @@ if __name__ == "__main__":
                         print("wrong type for exposure time")
                         continue
                     camreader.set_exposure(et)
+                elif x[:6] == "config":
+                    init_dict = open_config()
+                    if init_dict: dcam.prop_setfromdict(init_dict)
             except KeyboardInterrupt as e:
                 print("Finished with ctrl-C")
                 break

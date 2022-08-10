@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name = "pydcam",
-    version = "2022.08.09",
+    version = "2022.08.10",
     author = "David Jenkins",
     author_email = "David.Jenkins@eso.org",
     description = "A python interface for Hamamatsu Cameras",
@@ -39,6 +39,9 @@ setuptools.setup(
     entry_points = {
         "console_scripts": [
             "dcam_gui=pydcam.bin:gui",
+            "dcam_reader=pydcam.bin:reader",
+            "dcam_saver=pydcam.bin:saver",
+            "dcam_display=pydcam.bin:display",
                             ],
     },
 )

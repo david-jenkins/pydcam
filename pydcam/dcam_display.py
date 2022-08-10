@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 
 import sys
-import zmq
 import numpy
 import time
-from pydcam.dcam_reader import unpack_numpy, strip_timestamp
 import PyQt5
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 import pyqtgraph as pg
-import threading
-
-from collections import deque
 
 # class viewer(pg.Qt.QtGui.QtWidget):
 #     def __init__(self):
@@ -35,123 +30,6 @@ from collections import deque
 #         # e.g. take n frames every m second for N total time
 #         # save as they arrive? append to file? hdf5? fits?
         
-
-class zmq_reader(threading.Thread):
-    def __init__(self, ip="127.0.0.1", port=5556, topic='orca'):
-        super().__init__()
-
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.SUB)
-
-        self.topicfilter = topic.encode()
-        self.socket.setsockopt(zmq.SUBSCRIBE, self.topicfilter)
-        self.socket.setsockopt(zmq.CONFLATE, 1)
-        self.socket.connect(f"tcp://{ip}:{port}")
-        self.socket.RCVTIMEO = 10000
-
-        self.callbacks = deque()
-        self.ratelimit = 0
-
-        self.go = 1
-        self.this_time = 0
-
-    def register(self, func, value=True):
-        if value:
-            if callable(func):
-                if func not in self.callbacks:
-                    self.callbacks.append(func)
-        else:
-            if func in self.callbacks:
-                self.callbacks.remove(func)
-    
-    # def init(self):
-    #     while 1:
-    #         try:
-    #             message = self.socket.recv()
-    #             break
-    #         except zmq.error.Again as e:
-    #             print(e)
-    #             print("timeout")
-    #         except KeyboardInterrupt as e:
-    #             print("Killed by ctrl-c")
-    #             sys.exit(0)
-
-    #     buffer = message[len(self.topicfilter):]
-    #     buffer, this_time = strip_timestamp(buffer)
-    #     self.data = numpy.squeeze(unpack_numpy(buffer))
-
-    #     self.call_callbacks()
-    #     self.go = 1
-    #     self.this_time = 0
-
-    def call_callbacks(self):
-        for func in list(self.callbacks):
-            func(self.data)
-    
-    def stop(self):
-        self.go = 0
-        
-    def run(self):
-        timeouts = 0
-        self.now = 0
-        while self.go:
-            try:
-                message = self.socket.recv()
-            except KeyboardInterrupt as e:
-                print("quit with ctrl-c")
-            except zmq.error.Again as e:
-                print("timeout")
-                timeouts+=1
-                if timeouts > 10:
-                    return
-                continue
-            buffer = message[len(self.topicfilter):]
-            buffer, this_time = strip_timestamp(buffer)
-            self.this_time = this_time
-            self.data = unpack_numpy(buffer)
-            if self.ratelimit:
-                if time.time()-self.now > self.ratelimit:
-                    self.now = time.time()
-                else:
-                    continue
-            self.call_callbacks()
-
-    def oneshot(self):
-        ready = threading.Event()
-        def func(data):
-            self.oneshot_data = data
-            ready.set()
-        self.oneshot_callback(func)
-        ready.wait()
-        return self.oneshot_data
-
-    def oneshot_callback(self,func):
-        def wrapper(data):
-            self.register(wrapper,False)
-            func(data)
-        self.register(wrapper,True)
-
-    def multishot(self,n):
-        ready = threading.Event()
-        self.multishot_return = []
-        def func(data,done):
-            self.multishot_return.append(data)
-            if done:
-                ready.set()
-        self.multishot_callback(func,n)
-        ready.wait()
-        return numpy.array(self.multishot_return)
-
-    def multishot_callback(self,func,n):
-        cnt = [0]
-        def wrapper(data):
-            test = cnt[0] >= n - 1
-            func(data,test)
-            if test:
-                self.register(wrapper,False)
-            cnt[0]+=1
-        self.register(wrapper,True)
-
 class ImageDisplay(QtW.QWidget):
     updateDisplay = QtC.pyqtSignal()
     updateIsoSat = QtC.pyqtSignal()
@@ -563,11 +441,11 @@ class CamDisplay(QtW.QWidget):
         QtW.QApplication.processEvents()
 
 
-
 if __name__ == "__main__":
 
-    this_zmq = zmq_reader()
-    this_zmq.ratelimit = 0.01
+    from pydcam.utils.zmq_pubsub import zmq_reader
+
+    this_zmq = zmq_reader(ratelimit=0.01)
 
     app = QtW.QApplication(sys.argv)
     
@@ -576,9 +454,6 @@ if __name__ == "__main__":
 
     this_zmq.register(this.update_trigger)
 
-    this_zmq.start()
-    try:
-        app.exec_()
-    except KeyboardInterrupt as e:
-        print("Cancelled")
-    this_zmq.stop()
+    with this_zmq:
+        sys.exit(app.exec())
+

@@ -1,24 +1,58 @@
 
+import json
+import sys
 from pathlib import Path
 import toml
+import yaml
 from pydcam.utils.tomlencoder import MyTomlEncoder
+from PyQt5 import QtWidgets as QtW
 
-CONF_DIR = Path(__file__).resolve().parent.parent/"config"
-
-CONF_FILE = "orca_config1.toml"
-
-def open_config(file_name):
-    if ".toml" in file_name:
-        with open(CONF_DIR/file_name,"r") as cf:
+def open_config(file_path=None):
+    if file_path is None:
+        if QtW.QApplication.instance() is None:
+            app = QtW.QApplication([])
+        file_path = QtW.QFileDialog.getOpenFileName(None,"Select Config File",str(Path.home()),"Config Files (*.toml *.yaml *.json)")[0]
+        if file_path == "":
+            return None
+    file_path = Path(file_path).expanduser().resolve()
+    if not file_path.exists():
+        print("No file available")
+        return None
+    if ".toml" in file_path.name:
+        with open(file_path, "r") as cf:
             ret = toml.load(cf)
         return ret
+    elif ".yaml" in file_path.name:
+        with open(file_path, "r") as cf:
+            ret = yaml.safe_load(cf)
+        return ret
+    elif ".json" in file_path.name:
+        with open(file_path, "r") as cf:
+            ret = json.load(cf)
+        return ret
     else:
-        raise Exception("Cannot open file")
+        print("Wrong file type")
+        return None
 
-def save_config(indict, file_name):
-    if ".toml" in file_name:
-        print("saving config to ", CONF_DIR/file_name)
-        with open(CONF_DIR/file_name,"w") as cf:
+def save_config(indict, file_path=None):
+    if file_path is None:
+        if QtW.QApplication.instance() is None:
+            app = QtW.QApplication([])
+        file_path = QtW.QFileDialog.getSaveFileName(None,"Save Config File",str(Path.home()),"Config Files (*.toml *.yaml *.json)")
+    elif not Path(file_path).is_absolute():
+        if QtW.QApplication.instance() is None:
+            app = QtW.QApplication([])
+        dir_path = QtW.QFileDialog.getExistingDirectory(None,"Select Directory to Save Config File",str(Path.home()))
+        file_path = Path(dir_path)/file_path
+    file_path = Path(file_path)
+    if ".toml" in file_path.name:
+        with open(file_path, "w") as cf:
             toml.dump(indict, cf, MyTomlEncoder())
+    elif ".yaml" in file_path.name:
+        with open(file_path, "w") as cf:
+            yaml.dump(indict, cf)
+    elif ".json" in file_path.name:
+        with open(file_path, "w") as cf:
+            json.dump(indict, cf, indent=4)
     else:
-        raise Exception("Cannot save file")
+        print("Wrong file type, not saving file")

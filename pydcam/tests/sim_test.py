@@ -1,4 +1,5 @@
-from pydcam.dcam_reader import DCamSim, zmq_publisher
+from pydcam.dcam_reader import DCamSim
+from pydcam.utils.zmq_pubsub import zmq_publisher
 
 if __name__ == "__main__":
 

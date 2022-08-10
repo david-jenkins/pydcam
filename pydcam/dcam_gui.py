@@ -6,12 +6,13 @@ import PyQt5
 from PyQt5 import QtCore as QtC 
 from PyQt5 import QtGui as QtG
 from PyQt5 import QtWidgets as QtW
-import pyqtgraph as pg
+
 from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, registerParameterType
 
 from pydcam.dcam_reader import DCamReader, DCamSim
-from pydcam.dcam_display import CamDisplay, ImageUpdater
+from pydcam.dcam_display import ImageUpdater
 from pydcam.dcam_saver import CamSaver
+from pydcam import open_config
 
 class ControlWindow(QtW.QWidget):
     camfps_signal = QtC.pyqtSignal(float)
@@ -33,7 +34,7 @@ class ControlWindow(QtW.QWidget):
                 ]},
                 {'name':'Set Dimensions', 'type':'action', 'tip':'Use to set Window Parameters'},
                 {'name':'Set Fullframe', 'type':'action', 'tip':'Use to set Window Parameters'},
-                {'name':'Exposure Time (s)', 'type':'float', 'value':0, 'limits':[0.001,10]},
+                {'name':'Exposure Time (s)', 'type':'float', 'value':0, 'limits':[0.0001,10]},
                 {'name':'Exposure Time (ms)', 'type':'float', 'value':0, 'limits':[1,10000]}
             ]},
             {'name':'Frame Rates','type':'group','children':[
@@ -59,6 +60,9 @@ class ControlWindow(QtW.QWidget):
         self.opendisplaybutton = QtW.QPushButton("Open Display")
         self.opendisplaybutton.clicked.connect(self.show_display)
         self.buttonlayout.addWidget(self.opendisplaybutton)
+        self.loadconfigbutton = QtW.QPushButton("Load Config")
+        self.loadconfigbutton.clicked.connect(self.load_config)
+        self.buttonlayout.addWidget(self.loadconfigbutton)
         self.opensaverbutton = QtW.QPushButton("Open Image Saver")
         self.opensaverbutton.clicked.connect(self.show_saver)
         self.buttonlayout.addWidget(self.opensaverbutton)
@@ -72,7 +76,7 @@ class ControlWindow(QtW.QWidget):
 
 
         self.camreader = reader
-        self.camsaver = CamSaver(self.camreader.get_image,self.camreader.get_images)
+        self.camsaver = CamSaver(self.camreader.get_image,self.camreader.get_images,self.camreader.get_exposure)
         self.camsaver.set_can_save(self.camreader.get_running)
 
         self.camreader.camera.set_fps_cb(self.camfps_signal.emit)
@@ -205,6 +209,16 @@ class ControlWindow(QtW.QWidget):
         self.camsaver.show()
         self.camsaver.setFixedSize(self.camsaver.size())
 
+    def load_config(self):
+        cf_dict = open_config()
+        if cf_dict is not None:
+            wasrunning = self.camreader.get_running()
+            if wasrunning:
+                self.stop_camera()
+            self.camreader.dcam.prop_setfromdict(cf_dict)
+            if wasrunning:
+                self.start_camera()
+
     def eventFilter(self, obj, event):
         if event.type() == QtC.QEvent.Close and obj in self.camdisplays:
             print("Closing cam display")
@@ -222,16 +236,18 @@ class ControlWindow(QtW.QWidget):
 if __name__ == "__main__":
 
     from pydcam.api import OpenCamera
-    from pydcam import open_config
+    from pathlib import Path
 
-    CONF_FILE = "orca_config1.toml"
+    fname = None
+    if len(sys.argv) > 1:
+        fname = Path(sys.argv[1]).resolve()
 
     with OpenCamera(0) as dcam:
 
         dcam.prop_setdefaults()
-        init_dict = open_config(CONF_FILE)
-        print("Setting from config file")
-        dcam.prop_setfromdict(init_dict)
+        if fname is not None:
+            init_dict = open_config(fname)
+            if init_dict: dcam.prop_setfromdict(init_dict)
 
         app = QtW.QApplication(sys.argv)
         reader = DCamReader(dcam)
