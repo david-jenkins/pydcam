@@ -7,11 +7,15 @@ class OpenCamera:
 
     def __enter__(self):
         if Dcamapi.init() is None:
-            raise Exception(f"Dcamapi.init() fails with error {Dcamapi.lasterr()}")
+            # raise Exception(f"Dcamapi.init() fails with error {Dcamapi.lasterr()}")
+            print(f"Dcamapi.init() fails with error {Dcamapi.lasterr()}")
+            return None
         self.dcam = Dcam(self.iDevice)
         if self.dcam.dev_open() is False:
             print("No Camera available")
-            raise Exception(f"Dcam.dev_open() fails with error {self.dcam.lasterr().name}")
+            # raise Exception(f"Dcam.dev_open() fails with error {self.dcam.lasterr().name}")
+            print(f"Dcam.dev_open() fails with error {self.dcam.lasterr().name}")
+            return None
         return self.dcam
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -19,3 +23,6 @@ class OpenCamera:
         self.dcam.dev_close()
         print("Closing the Dcamapi")
         Dcamapi.uninit()
+        if exc_type and exc_type==SystemExit:
+            return False
+        return True

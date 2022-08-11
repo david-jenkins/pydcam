@@ -14,6 +14,47 @@ from pydcam.dcam_display import ImageUpdater
 from pydcam.dcam_saver import CamSaver
 from pydcam import open_config
 
+class ConsoleLog(QtW.QMainWindow):
+    writeSig = QtC.pyqtSignal(str)
+    def __init__(self):
+        super().__init__()
+        self.text = QtW.QTextEdit()
+        self.text.setReadOnly(True)
+        self.text.document().setMaximumBlockCount(1000)
+
+        self.setCentralWidget(self.text)
+
+        self.stdout = None
+        self.stderr = None
+
+        self.writeSig.connect(self.update)
+
+    def write(self, buf:str):
+        self.writeSig.emit(buf)
+
+    def update(self, buf:str):
+        self.text.moveCursor(QtG.QTextCursor.End)
+        self.text.insertPlainText(buf)
+        self.text.moveCursor(QtG.QTextCursor.End)
+
+    def flush(self):
+        pass
+
+    def set_as_stdout(self):
+        self.stdout = sys.stdout
+        sys.stdout = self
+
+    def set_as_stderr(self):
+        self.stderr = sys.stderr
+        sys.stderr = self
+
+    def closeEvent(self, a0: QtG.QCloseEvent) -> None:
+        if self.stderr:
+            sys.stderr = self.stderr
+        if self.stdout:
+            sys.stdout = self.stdout
+        return super().closeEvent(a0)
+
 class ControlWindow(QtW.QWidget):
     camfps_signal = QtC.pyqtSignal(float)
     disfps_signal = QtC.pyqtSignal(float)
@@ -97,6 +138,8 @@ class ControlWindow(QtW.QWidget):
         self.paramgroup.param('Camera Setup').param('Exposure Time (ms)').sigValueChanged.connect(self.setExposureTime)
 
         self.installEventFilter(self)
+
+        self.closefuncs = []
 
         # self.timer = QtC.QTimer()
         # self.timer.timeout.connect(QtW.QApplication.processEvents)
@@ -231,7 +274,12 @@ class ControlWindow(QtW.QWidget):
             for obj in self.camdisplays:
                 obj.close()
             self.camsaver.close()
+            for func in self.closefuncs:
+                func()
         return super().eventFilter(obj, event)
+
+    def register_atclose(self, func):
+        self.closefuncs.append(func)
 
 if __name__ == "__main__":
 

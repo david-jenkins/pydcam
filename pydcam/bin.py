@@ -1,11 +1,10 @@
 
 
-import atexit
 import sys
 from PyQt5 import QtWidgets as QtW
 from pathlib import Path
 from pydcam.dcam_reader import DCamReader
-from pydcam.dcam_gui import ControlWindow
+from pydcam.dcam_gui import ControlWindow, ConsoleLog
 from pydcam.api import OpenCamera
 from pydcam.api.dcamapi4 import DCAM_IDPROP
 from pydcam import open_config
@@ -20,6 +19,17 @@ def gui():
     if len(sys.argv) > 1:
         fname = Path(sys.argv[1]).resolve()
 
+    print("Showing log window")
+
+    app = QtW.QApplication(sys.argv)
+
+    log = ConsoleLog()
+    log.set_as_stdout()
+    log.set_as_stderr()
+    log.show()
+
+    print("Looking for Camera, please wait....")
+
     with OpenCamera(iDevice) as dcam:
 
         dcam.prop_setdefaults()
@@ -27,7 +37,6 @@ def gui():
             init_dict = open_config(fname)
             if init_dict: dcam.prop_setfromdict(init_dict)
 
-        app = QtW.QApplication(sys.argv)
         reader = DCamReader(dcam)
         this_zmq = zmq_publisher()
         reader.register_callback(this_zmq.publish)
@@ -35,8 +44,12 @@ def gui():
         controlWin = ControlWindow(reader)
         controlWin.show()
 
-        atexit.register(this_zmq.close)
+        controlWin.register_atclose(log.close)
+        controlWin.register_atclose(this_zmq.close)
         sys.exit(app.exec())
+
+    print("No camera found, please connect")
+    sys.exit(app.exec())
 
 def reader():
     iDevice = 0
