@@ -23,11 +23,14 @@ def propertylist(iDevice = 0):
 
 if __name__ == "__main__":
 
-    cameraname = "orca"
-
     info, props = propertylist()
 
     save_dict = {"DEVICE_INFO":info,**props}
 
-    save_config(save_dict,f"{cameraname}_raw_properties.toml")
+    if info["MODEL"] == "C15440-20UP":
+        cameraname = "fusion"
+    else:
+        cameraname = "flash"
+
+    save_config(save_dict, f"{cameraname}_raw_properties.toml")
 

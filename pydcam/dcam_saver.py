@@ -365,7 +365,7 @@ class CamSaver(QtW.QWidget):
             self.imdisplay.show()
 
     def openfile(self):
-        fname = QtW.QFileDialog.getOpenFileName(self, 'Open file', self.dir_path, "Image files (*.FITS *.hdf5)",options=QtW.QFileDialog.DontUseNativeDialog)
+        fname = QtW.QFileDialog.getOpenFileName(self, 'Open file', str(self.dir_path), "Image files (*.FITS *.hdf5)",options=QtW.QFileDialog.DontUseNativeDialog)
         if fname == ('',''):
             return
         fext = fname[0].split(".")[-1]

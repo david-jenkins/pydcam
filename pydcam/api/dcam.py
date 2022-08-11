@@ -420,6 +420,8 @@ class Dcam:
         values should be floats
         """
         for key, value in prop_dict.items():
+            if isinstance(value, dict):
+                continue
             try:
                 idprop = DCAM_IDPROP[key]
             except Exception as e:

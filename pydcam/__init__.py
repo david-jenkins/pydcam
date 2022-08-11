@@ -7,11 +7,12 @@ import yaml
 from pydcam.utils.tomlencoder import MyTomlEncoder
 from PyQt5 import QtWidgets as QtW
 
-def open_config(file_path=None):
-    if file_path is None:
-        if QtW.QApplication.instance() is None:
+def open_config(file_path=""):
+    if not Path(file_path).is_absolute():
+        app = QtW.QApplication.instance()
+        if app is None:
             app = QtW.QApplication([])
-        file_path = QtW.QFileDialog.getOpenFileName(None,"Select Config File",str(Path.home()),"Config Files (*.toml *.yaml *.json)")[0]
+        file_path = QtW.QFileDialog.getOpenFileName(None,"Select Config File",str(Path.home()/file_path),"Config Files (*.toml *.yaml *.json)")[0]
         if file_path == "":
             return None
     file_path = Path(file_path).expanduser().resolve()
@@ -34,16 +35,13 @@ def open_config(file_path=None):
         print("Wrong file type")
         return None
 
-def save_config(indict, file_path=None):
-    if file_path is None:
+def save_config(indict, file_path=""):
+    if not Path(file_path).is_absolute():
         if QtW.QApplication.instance() is None:
             app = QtW.QApplication([])
-        file_path = QtW.QFileDialog.getSaveFileName(None,"Save Config File",str(Path.home()),"Config Files (*.toml *.yaml *.json)")
-    elif not Path(file_path).is_absolute():
-        if QtW.QApplication.instance() is None:
-            app = QtW.QApplication([])
-        dir_path = QtW.QFileDialog.getExistingDirectory(None,"Select Directory to Save Config File",str(Path.home()))
-        file_path = Path(dir_path)/file_path
+        file_path = QtW.QFileDialog.getSaveFileName(None,"Save Config File",str(Path.home()/file_path),"Config Files (*.toml *.yaml *.json)")[0]
+        if file_path == "":
+            return None
     file_path = Path(file_path)
     if ".toml" in file_path.name:
         with open(file_path, "w") as cf:

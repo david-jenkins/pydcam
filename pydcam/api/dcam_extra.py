@@ -36,13 +36,63 @@ def dcamcon_show_dcamdev_info_detail( dcam:Dcam ):
     info = {}
     for idstr in DCAM_IDSTR:
         value = dcam.dev_getstring(idstr)
-        if not value:
+        if value is False:
             print(f"{idstr.name} = {dcam.lasterr().name}")
         else:
             print(f"{idstr.name} = {value}")
             info[idstr.name] = value
 
     return info
+
+def dcamcon_get_writable( dcam:Dcam ):
+
+    iProp = dcam.prop_getnextid(0)
+
+    if iProp is False:
+        print("DCAMPROP_OPTION.SUPPORT error -> ", dcam.lasterr())
+        return
+
+    properties = {}
+
+    while ( iProp != 0 ):
+
+        text = dcam.prop_getname(iProp)
+        if text is False:
+            print(f"ERROR: dcamprop_getname({iProp})")
+            return
+
+        value = dcam.prop_getvalue(iProp)
+        if value is False:
+            print(f"ERROR: dcamprop_getvalue({iProp})")
+
+        property_dict = {"name":text,"id":iProp,"value":value}
+
+        propattr = dcam.prop_getattr(iProp)
+
+        if propattr.is_writable():
+            if propattr.attribute & DCAM_PROP.ATTR.HASRANGE:
+                property_dict['min'] = propattr.valuemin
+                property_dict['max'] = propattr.valuemax
+
+            # step
+            if propattr.attribute & DCAM_PROP.ATTR.HASSTEP:
+                property_dict['step'] = propattr.valuestep
+
+            # default
+            if propattr.attribute & DCAM_PROP.ATTR.HASDEFAULT:
+                property_dict['default'] = propattr.valuedefault
+
+            properties[DCAM_IDPROP(iProp).name] = property_dict
+
+        iProp = dcam.prop_getnextid(iProp)
+
+        if iProp is False:
+            print("No more properties available")
+            break
+            
+    props = {key:value["value"] for key,value in properties.items()}
+    props.update({key+".properties":value for key,value in properties.items()})
+    return props
 
 def dcamcon_show_propertyattr(propattr:DCAMPROP_ATTR, bElement = False):
     count = 0
@@ -106,12 +156,12 @@ def dcamcon_show_supportmodevalues(dcam:Dcam, iProp, value, bElement = False):
         # get value text
         pv_index = pv_index + 1
         text = dcam.prop_getvaluetext(iProp, value)
-        if text:
+        if text is not False:
             printf( "%s\t%d:\t%s\n"%(indent, pv_index, text))
             mode_dict["support"][str(pv_index)] = text
         # get next value
         value = dcam.prop_queryvalue(iProp,value,DCAMPROP_OPTION.NEXT)
-        if not value:
+        if value is False:
             break
     return mode_dict
 
@@ -128,7 +178,7 @@ def dcamcon_show_arrayelement(dcam:Dcam, basepropattr:DCAMPROP_ATTR):
         # get number of array
         iProp = basepropattr.iProp_NumberOfElement
         value = dcam.prop_getvalue(iProp)
-        if value:
+        if value is not False:
 
             nArray = value
             printf("\tNumber of valid element: %d\n"%(nArray))
@@ -136,12 +186,12 @@ def dcamcon_show_arrayelement(dcam:Dcam, basepropattr:DCAMPROP_ATTR):
             iProp = basepropattr.iProp
             iProp = dcam.prop_getnextid(iProp,DCAMPROP_OPTION.ARRAYELEMENT)
             
-            if iProp:
+            if iProp is not False:
 
                 while(True):
 
                     text = dcam.prop_getname(iProp)
-                    if not text:
+                    if text is False:
                         print("ERROR in dcamprop_getname()", "IDPROP:%0x08x", iProp )
                         return
 
@@ -163,7 +213,7 @@ def dcamcon_show_arrayelement(dcam:Dcam, basepropattr:DCAMPROP_ATTR):
 
                     prop_list.append(array_prop)
                     iProp = dcam.prop_getnextid(iProp, DCAMPROP_OPTION.ARRAYELEMENT)
-                    if not iProp:
+                    if iProp is False:
                         break
 
     else: #if SHOW_PROPERTY_ARRAYELEMENT != 2:
@@ -171,7 +221,7 @@ def dcamcon_show_arrayelement(dcam:Dcam, basepropattr:DCAMPROP_ATTR):
         iProp = basepropattr.iProp_NumberOfElement
         value = dcam.prop_getvalue(iProp)
 
-        if value:
+        if value is not False:
             nArray = int(value)
             printf( "\tNumber of valid element: %d\n"%(nArray) )
 
@@ -179,7 +229,7 @@ def dcamcon_show_arrayelement(dcam:Dcam, basepropattr:DCAMPROP_ATTR):
                 # get property name of array element
                 iSubProp = basepropattr.iProp + i * basepropattr.iPropStep_Element
                 text = dcam.prop_getname(iSubProp)
-                if not text:
+                if text is False:
                     print("ERROR in dcamprop_getname()", "IDPROP:%0x08x", iSubProp )
                     print(dcam.lasterr().name)
                     return
@@ -212,7 +262,7 @@ def dcamcon_show_property_list( dcam:Dcam ):
 
     iProp = dcam.prop_getnextid(0)
 
-    if not iProp:
+    if iProp is False:
         print("DCAMPROP_OPTION.SUPPORT error -> ", dcam.lasterr())
         return
 
@@ -222,11 +272,16 @@ def dcamcon_show_property_list( dcam:Dcam ):
         # get property name
         # text = (ctypes.c_char * 64)()
         text = dcam.prop_getname(iProp)
-        if not text:
+        if text is False:
             print(f"ERROR: dcamprop_getname({iProp})")
             return
+        value = dcam.prop_getvalue(iProp)
+        if value is False:
+            print(f"ERROR: dcamprop_getvalue({iProp})")
+            return
         print("getting property: ",text)
-        property_dict = {"name":text,"id":iProp}
+        print("got value: ",value)
+        property_dict = {"name":text,"id":iProp,"value":value}
         printf( "0x%08x: %s\n"%(iProp,text))
 
         # get property attribute
@@ -297,16 +352,34 @@ def dcamcon_set_prop_dict(dcam:Dcam, prop_dict):
 def dcamcon_check_set( dcam:Dcam, iProp, value ):
     # check whether the camera supports or not. (refer sample program propertylist to get the list of support values)
     value = dcam.prop_queryvalue(iProp, value)
-    if not value:
+    if value is False:
         print(f"ERROR in prop_queryvalue({DCAM_IDPROP(iProp)}, {value})")
         print(f"{dcam.lasterr().name}")
         return False
 
     # set value to the camera
     retval = dcam.prop_setgetvalue(iProp, value)
-    if not retval:
+    if retval is False:
         print(f"ERROR in prop_setgetvalue({DCAM_IDPROP(iProp)}, {value})")
         print(f"{dcam.lasterr().name}")
         return False
 
     return retval
+
+
+
+if __name__ == "__main__":
+    from pydcam.api import OpenCamera
+    from pydcam import save_config
+
+    with OpenCamera(0) as dcam:
+        model = dcam.dev_getstring(DCAM_IDSTR.MODEL)
+        dcam.prop_setdefaults()
+        props = dcamcon_get_writable(dcam)
+
+    if model == "C15440-20UP":
+        name = "fusion"
+    else:
+        name = "flash"
+
+    save_config(props,f"{name}_config0")

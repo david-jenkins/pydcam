@@ -1,0 +1,310 @@
+
+
+# This file contains the default writable properties of the ORCA Fusion BT and their valid values
+
+
+
+
+SENSORMODE = 1.0
+READOUTSPEED = 3.0
+BITSPERCHANNEL = 16.0
+TRIGGERSOURCE = 1.0
+TRIGGER_MODE = 1.0
+TRIGGERACTIVE = 1.0
+TRIGGER_GLOBALEXPOSURE = 3.0
+TRIGGERPOLARITY = 1.0
+TRIGGERTIMES = 1.0
+TRIGGERDELAY = 0.0
+EXPOSURETIME = 0.011213220588235293
+DEFECTCORRECT_MODE = 2.0
+HOTPIXELCORRECT_LEVEL = 1.0
+BINNING = 1.0
+SUBARRAYHPOS = 0.0
+SUBARRAYHSIZE = 2304.0
+SUBARRAYVPOS = 0.0
+SUBARRAYVSIZE = 2304.0
+SUBARRAYMODE = 1.0
+INTENSITYLUT_MODE = 1.0
+IMAGE_PIXELTYPE = 2.0
+IMAGE_CAMERASTAMP = 0.0
+OUTPUTTRIGGER_SOURCE = 2.0
+OUTPUTTRIGGER_POLARITY = 1.0
+OUTPUTTRIGGER_DELAY = 0.0
+OUTPUTTRIGGER_PERIOD = 0.0009999999999999998
+OUTPUTTRIGGER_KIND = 1.0
+OUTPUTTRIGGER_PREHSYNCCOUNT = 0.0
+MASTERPULSE_MODE = 1.0
+MASTERPULSE_TRIGGERSOURCE = 1.0
+MASTERPULSE_INTERVAL = 0.1
+MASTERPULSE_BURSTTIMES = 1.0
+
+["SENSORMODE.properties"]
+name = "SENSOR MODE"
+id = 4194832
+value = 1.0
+min = 1.0
+max = 12.0
+default = 1.0
+
+["READOUTSPEED.properties"]
+name = "READOUT SPEED"
+id = 4194576
+value = 3.0
+min = 1.0
+max = 3.0
+step = 1.0
+default = 3.0
+
+["BITSPERCHANNEL.properties"]
+name = "BIT PER CHANNEL"
+id = 4325680
+value = 16.0
+min = 12.0
+max = 16.0
+step = 4.0
+default = 16.0
+
+["TRIGGERSOURCE.properties"]
+name = "TRIGGER SOURCE"
+id = 1048848
+value = 1.0
+min = 1.0
+max = 4.0
+default = 1.0
+
+["TRIGGER_MODE.properties"]
+name = "TRIGGER MODE"
+id = 1049104
+value = 1.0
+min = 1.0
+max = 6.0
+default = 1.0
+
+["TRIGGERACTIVE.properties"]
+name = "TRIGGER ACTIVE"
+id = 1048864
+value = 1.0
+min = 1.0
+max = 3.0
+default = 1.0
+
+["TRIGGER_GLOBALEXPOSURE.properties"]
+name = "TRIGGER GLOBAL EXPOSURE"
+id = 2032384
+value = 3.0
+min = 3.0
+max = 5.0
+default = 3.0
+
+["TRIGGERPOLARITY.properties"]
+name = "TRIGGER POLARITY"
+id = 1049120
+value = 1.0
+min = 1.0
+max = 2.0
+default = 1.0
+
+["TRIGGERTIMES.properties"]
+name = "TRIGGER TIMES"
+id = 1049152
+value = 1.0
+min = 1.0
+max = 10000.0
+step = 1.0
+default = 1.0
+
+["TRIGGERDELAY.properties"]
+name = "TRIGGER DELAY"
+id = 1049184
+value = 0.0
+min = 0.0
+max = 10.000002
+step = 1e-6
+default = 0.0
+
+["EXPOSURETIME.properties"]
+name = "EXPOSURE TIME"
+id = 2031888
+value = 0.011213220588235293
+min = 1.763235294117647e-5
+max = 10.000004661764706
+step = 1e-8
+default = 0.011213220588235293
+
+["DEFECTCORRECT_MODE.properties"]
+name = "DEFECT CORRECT MODE"
+id = 4653072
+value = 2.0
+min = 1.0
+max = 2.0
+default = 2.0
+
+["HOTPIXELCORRECT_LEVEL.properties"]
+name = "HOT PIXEL CORRECT LEVEL"
+id = 4653104
+value = 1.0
+min = 1.0
+max = 3.0
+default = 1.0
+
+["BINNING.properties"]
+name = "BINNING"
+id = 4198672
+value = 1.0
+min = 1.0
+max = 4.0
+default = 1.0
+
+["SUBARRAYHPOS.properties"]
+name = "SUBARRAY HPOS"
+id = 4202768
+value = 0.0
+min = 0.0
+max = 2300.0
+step = 4.0
+default = 0.0
+
+["SUBARRAYHSIZE.properties"]
+name = "SUBARRAY HSIZE"
+id = 4202784
+value = 2304.0
+min = 4.0
+max = 2304.0
+step = 4.0
+default = 2304.0
+
+["SUBARRAYVPOS.properties"]
+name = "SUBARRAY VPOS"
+id = 4202800
+value = 0.0
+min = 0.0
+max = 2300.0
+step = 4.0
+default = 0.0
+
+["SUBARRAYVSIZE.properties"]
+name = "SUBARRAY VSIZE"
+id = 4202816
+value = 2304.0
+min = 4.0
+max = 2304.0
+step = 4.0
+default = 2304.0
+
+["SUBARRAYMODE.properties"]
+name = "SUBARRAY MODE"
+id = 4202832
+value = 1.0
+min = 1.0
+max = 2.0
+default = 1.0
+
+["INTENSITYLUT_MODE.properties"]
+name = "INTENSITY LUT MODE"
+id = 3671312
+value = 1.0
+min = 1.0
+max = 2.0
+default = 1.0
+
+["IMAGE_PIXELTYPE.properties"]
+name = "IMAGE PIXEL TYPE"
+id = 4326000
+value = 2.0
+min = 1.0
+max = 3.0
+default = 2.0
+
+["IMAGE_CAMERASTAMP.properties"]
+name = "IMAGE CAMERA STAMP"
+id = 4326144
+value = 0.0
+min = 0.0
+max = 65535.0
+step = 1.0
+default = 0.0
+
+["OUTPUTTRIGGER_SOURCE.properties"]
+name = "OUTPUT TRIGGER SOURCE[0]"
+id = 1835280
+value = 2.0
+min = 2.0
+max = 6.0
+default = 2.0
+
+["OUTPUTTRIGGER_POLARITY.properties"]
+name = "OUTPUT TRIGGER POLARITY[0]"
+id = 1835296
+value = 1.0
+min = 1.0
+max = 2.0
+default = 1.0
+
+["OUTPUTTRIGGER_DELAY.properties"]
+name = "OUTPUT TRIGGER DELAY[0]"
+id = 1835328
+value = 0.0
+min = 0.0
+max = 10.0
+step = 1e-6
+default = 0.0
+
+["OUTPUTTRIGGER_PERIOD.properties"]
+name = "OUTPUT TRIGGER PERIOD[0]"
+id = 1835344
+value = 0.0009999999999999998
+min = 1e-6
+max = 10.0
+step = 1e-6
+default = 0.001
+
+["OUTPUTTRIGGER_KIND.properties"]
+name = "OUTPUT TRIGGER KIND[0]"
+id = 1835360
+value = 1.0
+min = 1.0
+max = 5.0
+default = 1.0
+
+["OUTPUTTRIGGER_PREHSYNCCOUNT.properties"]
+name = "OUTPUT TRIGGER PRE HSYNC COUNT"
+id = 1835408
+value = 0.0
+min = 0.0
+max = 4607.0
+step = 1.0
+default = 0.0
+
+["MASTERPULSE_MODE.properties"]
+name = "MASTER PULSE MODE"
+id = 1966112
+value = 1.0
+min = 1.0
+max = 3.0
+default = 1.0
+
+["MASTERPULSE_TRIGGERSOURCE.properties"]
+name = "MASTER PULSE TRIGGER SOURCE"
+id = 1966128
+value = 1.0
+min = 1.0
+max = 2.0
+default = 1.0
+
+["MASTERPULSE_INTERVAL.properties"]
+name = "MASTER PULSE INTERVAL"
+id = 1966144
+value = 0.1
+min = 4.9999999999999996e-6
+max = 10.0
+step = 1e-6
+default = 0.09999999999999999
+
+["MASTERPULSE_BURSTTIMES.properties"]
+name = "MASTER PULSE BURST TIMES"
+id = 1966160
+value = 1.0
+min = 1.0
+max = 65535.0
+step = 1.0
+default = 1.0

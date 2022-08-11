@@ -88,7 +88,7 @@ class cam_thread(threading.Thread):
                 break
             # retval = self.dcam.wait_again()
             retval = self.dcam.wait_capevent_frameready(3000)
-            if not retval:
+            if retval is False:
                 if self.dcam.lasterr() == DCAMERR.ABORT:
                     print("received the abort signal")
                 else:
@@ -273,15 +273,16 @@ class DCamReader():
         # start capture
         err = self.dcam.buf_alloc(3)
 
-        self.resize_thread_buffer()
-
-        if not err:
+        if err is False:
             print(f"ERROR in buf_alloc() -> {self.dcam.lasterr().name}" )
+            return
+
+        self.resize_thread_buffer()
 
         bufinfo = self.dcam.buf_get_info()
         print("BUFINFO:",bufinfo.width,bufinfo.height)
         err = self.dcam.cap_start()
-        if not err:
+        if err is False:
             print(f"Error in cap_start() -> {self.dcam.lasterr().name}")
         else:
             print( "Start Capture" )
@@ -290,8 +291,6 @@ class DCamReader():
             self.running = 1
 
     def close_camera(self):
-        # abort signal to dcamwait_start
-        self.dcam.wait_abort()
 
         self.publisher.pause()
         self.camera.pause()

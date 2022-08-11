@@ -41,7 +41,7 @@ def strip_timestamp(buffer):
     return buffer[DOUBLELEN:], unpack_double(buffer[:DOUBLELEN])[0]
 
 class zmq_publisher():
-    def __init__(self, ip="127.0.0.1", port=5556, topic='orca'):
+    def __init__(self, ip="127.0.0.1", port=5556, topic='hamamatsu'):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
         self.socket.bind(f"tcp://{ip}:{port}")
@@ -55,7 +55,7 @@ class zmq_publisher():
         self.socket.close()
 
 class zmq_reader(CallbackThread):
-    def __init__(self, ip="127.0.0.1", port=5556, topic='orca', ratelimit=0):
+    def __init__(self, ip="127.0.0.1", port=5556, topic='hamamatsu', ratelimit=0):
         super().__init__(ratelimit=ratelimit)
 
         self.ip = ip
@@ -102,7 +102,7 @@ class zmq_reader(CallbackThread):
 
 
 # class zmq_reader(threading.Thread):
-#     def __init__(self, ip="127.0.0.1", port=5556, topic='orca'):
+#     def __init__(self, ip="127.0.0.1", port=5556, topic='hamamatsu'):
 #         super().__init__()
 
 #         self.context = zmq.Context()
