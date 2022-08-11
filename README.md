@@ -16,6 +16,11 @@ A zmq_publisher is also available, to use it, instantiate the class with the req
 
 A saver GUI is also here, which allows saving images. This registers a callback when images are requested and then unregisters it when data collection is done. It then saves the images.
 
+To install either clone the repository and use pip install . in the root or run pip install git+https://github.com/david-jenkins/pydcam.git .
+
+To create exe, first install pydcam then install PyInstaller with pip install pyinstaller and then run:
+pyinstaller --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt5 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt5 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt5 -n HamamatsuPyDCAM -F .\pydcam\bin.py
+
 You can use
 [Github-flavored Markdown](https://guides.github.com/features/mastering-markdown/)
 to write your content.
