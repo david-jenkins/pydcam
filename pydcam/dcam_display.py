@@ -43,7 +43,7 @@ class AudioFeedback(QtW.QWidget):
         self.volumelabel = QtW.QLabel("Volume")
         self.volumebar = QLabeledSlider(QtC.Qt.Orientation.Vertical)
         self.volumebar.setRange(0,100)
-        self.volumebar.setValue(50)
+        self.volumebar.setValue(100)
         self.volumebar.valueChanged.connect(self.setvolume)
 
         self.playbutton = QtW.QPushButton("Play Tone")
@@ -116,7 +116,7 @@ class AudioFeedback(QtW.QWidget):
         self.resize(400,800)
 
     def setvolume(self, vol):
-        self.pixeltone.set_volume((vol-50)/2)
+        self.pixeltone.set_volume((vol-100)/2)
 
     def valuecallback(self, value):
         pass
@@ -170,12 +170,12 @@ class AudioFeedback(QtW.QWidget):
         time.sleep(1)
         while self.rangego:
             self.pixeltone.set_pitch(pmax)
-            time.sleep(PLAYTIME+1)
+            time.sleep(PLAYTIME+0.2)
             if not self.rangego: return
             pmin,pmax = self.pitchbar.value()
             self.pixeltone.set_pitch_per_second((pmax-pmin)/PLAYTIME)
             self.pixeltone.set_pitch(pmin)
-            time.sleep(PLAYTIME+1)
+            time.sleep(PLAYTIME+0.2)
 
     def playrange(self, event):
         self.rangego = event
@@ -189,6 +189,8 @@ class AudioFeedback(QtW.QWidget):
         if pmax >= 80 + pmin:
             self.valuebar.setRange(pmin,pmax)
             self.valuebar.setValue((pmin,pmax))
+        else:
+            print("Range must be greater than 80")
 
     def resetpxlrange(self):
         self.valuebar.setRange(0,2**16)
@@ -301,6 +303,9 @@ class ImageDisplay_base(QtW.QWidget):
         self.buttonlayout.addWidget(self.isospin,1,4,1,1)
         self.buttonlayout.addWidget(self.satspin,1,6,1,1)
 
+        self.buttonlayout.addWidget(self.resetisospin,1,5,1,1)
+        self.buttonlayout.addWidget(self.resetsatspin,1,7,1,1)
+
         self.mainlayout.addLayout(self.buttonlayout,1,0,1,2)
         self.setLayout(self.mainlayout)
 
@@ -326,10 +331,10 @@ class ImageDisplay(ImageDisplay_base):
         self.toggleisocurve(False)
 
         self.isospin.editingFinished.connect(self.isospinupdate)
-        self.resetisospin.clicked.connect(lambda:self.isospin.setValue(2**16))
+        self.resetisospin.clicked.connect(self.resetisospincallback)
 
         self.satspin.editingFinished.connect(self.satspinupdate)
-        self.resetisospin.clicked.connect(lambda:self.satspin.setValue(2**16))
+        self.resetsatspin.clicked.connect(self.resetsatspincallback)
 
         self.showsatbutton.toggled.connect(self.togglesat)
         self.togglesat(False)
@@ -338,8 +343,8 @@ class ImageDisplay(ImageDisplay_base):
         self.audiowidget = AudioFeedback()
         self.audiofeedback_button.clicked.connect(self.audiowidget.show)
 
-        self.isospin.setValue(65000)
-        self.satspin.setValue(65217)
+        self.resetisospincallback()
+        self.resetsatspincallback()
 
         self.image.roi.setSize(200)
 
@@ -398,6 +403,14 @@ class ImageDisplay(ImageDisplay_base):
         value = self.isospin.value()
         self.isoLine.setValue(value)
         self.updateIsocurve()
+
+    def resetisospincallback(self):
+        self.isospin.setValue(65000)
+        self.isospin.editingFinished.emit()
+
+    def resetsatspincallback(self):
+        self.satspin.setValue(65217)
+        self.satspin.editingFinished.emit()
 
     def updateIsocurve(self):
         val = self.isoLine.value()
@@ -463,7 +476,7 @@ class ImageDisplay(ImageDisplay_base):
             if self.sat_data is None or self.sat_data.shape[:2]!=data.shape:
                 self.sat_data = numpy.zeros((*data.shape,4),dtype=numpy.uint8)
             self.sat_data.fill(0)
-            self.sat_data[numpy.where(data>self.satLine.value())] = (1,0,0,1)
+            self.sat_data[numpy.where(data>=self.satLine.value())] = (1,0,0,1)
 
     def update_image(self):
         self.image.setImage(self.im_data, autoHistogramRange=False, autoRange=False, autoLevels=False)

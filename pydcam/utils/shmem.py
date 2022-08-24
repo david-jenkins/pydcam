@@ -79,7 +79,7 @@ class shmem_reader(CallbackThread):
         self.shmem_block = None
 
     def get_data(self):
-        if self.info is not None: 
+        if self.info is not None and self.shm_go: 
             while self.shm_go and self.info[0] == 0:
                 time.sleep(0.0001)
             if not self.shm_go: return
