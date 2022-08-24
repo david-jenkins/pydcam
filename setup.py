@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name = "pydcam",
-    version = "2022.08.10",
+    version = "2022.08.24",
     author = "David Jenkins",
     author_email = "David.Jenkins@eso.org",
     description = "A python interface for Hamamatsu Cameras",
@@ -27,15 +27,18 @@ setuptools.setup(
     install_requires=[
           'numpy',
           'PyQt5',
-          'pyqtgraph',
-          'rpyc',
+          'pyqtgraph',#@git+https://github.com/pyqtgraph/pyqtgraph',
           'pyzmq',
           'astropy',
           'toml',
           'h5py',
           'orjson',
+          'pysinewave@git+https://github.com/david-jenkins/pysinewave',
+          'superqt@git+https://github.com/napari/superqt',
       ],
-    dependency_links=['git+git://github.com/pyqtgraph/pyqtgraph.git@master'],
+    # dependency_links=[
+    #     'git+git://github.com/pyqtgraph/pyqtgraph.git@master',
+    #     'git+git://github.com/david-jenkins/pysinewave.git@master'],
     entry_points = {
         "console_scripts": [
             "dcam_gui=pydcam.bin:gui",

@@ -23,6 +23,4 @@ class OpenCamera:
         self.dcam.dev_close()
         print("Closing the Dcamapi")
         Dcamapi.uninit()
-        if exc_type and exc_type==SystemExit:
-            return False
-        return True
+        return False

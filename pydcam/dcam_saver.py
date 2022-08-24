@@ -6,6 +6,7 @@ import numpy
 import time
 import h5py
 import datetime
+from datetime import timezone
 from collections import deque
 from astropy.io import fits
 
@@ -20,6 +21,9 @@ from pathlib import Path
 
 from pydcam.dcam_display import ImageDisplay
 from pydcam.utils.zmq_pubsub import zmq_reader
+from pydcam.utils.runnable import MyRunnable
+
+get_now = partial(datetime.datetime.now, timezone.utc)
 
 def my_wait(secs,start_time=None):
     if start_time is None:
@@ -41,11 +45,6 @@ def list_to_numpy(imlist):
         return imlist
     else:
         raise TypeError("list_to_numpy: Type not understood")
-
-class MyRunnable(QtC.QRunnable):
-    def __init__(self,run):
-        super().__init__()
-        self.run = run
 
 class ImageViewer(QtW.QWidget):
     def __init__(self):
@@ -84,41 +83,41 @@ class ImageViewer(QtW.QWidget):
         self.buttonlayout.addWidget(self.lastbutton)
 
     def update(self,data):
+        self.image.relimitimage()
         if len(data.shape) == 3:
             self.image_count = data.shape[0]
             # self.image.setImage(numpy.transpose(data,axes=(0,2,1)),xvals=numpy.arange(self.image_count)+1)
-            self.image.update(numpy.transpose(data,axes=(0,2,1)))
+            self.image.old_update(numpy.transpose(data,axes=(0,2,1)))
             self.controlbar.show()
         else:
             self.image_count = 1
             # self.image.setImage(data.T)
-            self.image.update(data.T)
+            self.image.old_update(data.T)
             self.controlbar.hide()
-        self.image.relimitimage()
 
     def first_callback(self):
-        self.image.image.setCurrentIndex(0)
         self.image.relimitimage()
+        self.image.image.setCurrentIndex(0)
 
     def prev_callback(self):
         currind = self.image.image.currentIndex
         if currind==0:
             self.last_callback()
         else:
-            self.image.image.jumpFrames(-1)
             self.image.relimitimage()
+            self.image.image.jumpFrames(-1)
 
     def next_callback(self):
         currind = self.image.image.currentIndex
         if currind>=self.image_count-1:
             self.first_callback()
         else:
-            self.image.image.jumpFrames(+1)
             self.image.relimitimage()
+            self.image.image.jumpFrames(+1)
 
     def last_callback(self):
-        self.image.image.setCurrentIndex(self.image_count-1)
         self.image.relimitimage()
+        self.image.image.setCurrentIndex(self.image_count-1)
 
     def playpause_callback(self, event):
         if event:
@@ -253,7 +252,7 @@ class CamSaver(QtW.QWidget):
         if not self.can_save():
             self.statuslabel.setText("Can't save yet...")
             return
-        self.now = datetime.datetime.now()
+        self.now = get_now()
         N = self.numberofimages.value()
         if N == 0:
             return
@@ -278,8 +277,9 @@ class CamSaver(QtW.QWidget):
 
     def save_current_images(self, event=None, now=None):
         if now is None:
-            now = datetime.datetime.now()
-        timestamp = f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
+            now = get_now()
+        # timestamp = f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
+        timestamp = now.isoformat(timespec='seconds')[:19].replace(":","-")
         if self.savefitscheck.isChecked():
             self.save_many_fits(timestamp)
         if self.savehdf5check.isChecked():
@@ -291,13 +291,13 @@ class CamSaver(QtW.QWidget):
         self.update_filenamepreview()
 
     def update_filenamepreview(self):
-        now = datetime.datetime.now()
+        now = get_now()
         text = self.filenamepreview.text().split("\n")[0] + "\n"
         fname = self.filenameentry.text()
         if fname != "":
             fname += "_"
         self.fname = os.path.join(self.dir_path, fname)
-        fname = self.fname + f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
+        fname = self.fname + now.isoformat(timespec='seconds')[:19].replace(":","-") #f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
         text += fname
         self.filenamepreview.setText(text)
 

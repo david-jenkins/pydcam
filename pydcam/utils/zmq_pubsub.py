@@ -1,6 +1,5 @@
 
 
-from socket import IP_TOS
 import zmq
 import orjson
 import struct
@@ -93,12 +92,6 @@ class zmq_reader(CallbackThread):
         print("Stopping reader")
         super().stop()
         self.socket.close()
-
-    def __enter__(self):
-        self.start()
-
-    def __exit__(self,*args):
-        self.stop()
 
 
 # class zmq_reader(threading.Thread):

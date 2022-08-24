@@ -125,3 +125,9 @@ class CallbackThread(threading.Thread):
                 raise Exception()
             cnt[0] += 1
         self.register(wrapper)
+
+    def __enter__(self):
+        self.start()
+
+    def __exit__(self,*args):
+        self.stop()

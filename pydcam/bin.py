@@ -11,6 +11,9 @@ from pydcam import open_config
 from pydcam.dcam_display import ImageUpdater
 from pydcam.dcam_saver import CamSaver
 from pydcam.utils.zmq_pubsub import zmq_reader, zmq_publisher
+from pydcam.utils.shmem import shmem_publisher, shmem_reader
+
+MAX_SIZE = 2304*2304*2
 
 def gui():
     iDevice = 0
@@ -19,9 +22,9 @@ def gui():
     if len(sys.argv) > 1:
         fname = Path(sys.argv[1]).resolve()
 
-    print("Showing log window")
-
     app = QtW.QApplication(sys.argv)
+
+    log = None
 
     log = ConsoleLog()
     log.set_as_stdout()
@@ -31,25 +34,39 @@ def gui():
     print("Looking for Camera, please wait....")
 
     with OpenCamera(iDevice) as dcam:
-
+        print("Got camera ", dcam)
+        if dcam is None:
+            print("No camera found, please connect")
+            if log:
+                sys.exit(app.exec())
+            sys.exit()
         dcam.prop_setdefaults()
         if fname is not None:
             init_dict = open_config(fname)
             if init_dict: dcam.prop_setfromdict(init_dict)
 
         reader = DCamReader(dcam)
-        this_zmq = zmq_publisher()
-        reader.register_callback(this_zmq.publish)
+        try:
+            # this_zmq = zmq_publisher()
+            this_zmq = shmem_publisher(size=MAX_SIZE)
+        except Exception as e:
+            print(e)
+            this_zmq = None
+        else:
+            reader.register_callback(this_zmq.publish)
 
-        controlWin = ControlWindow(reader)
-        controlWin.show()
+        try:
+            controlWin = ControlWindow(reader)
+        except Exception as e:
+            print(e)
+        else:
+            controlWin.register_atclose(log.close)
+            controlWin.show()
 
-        controlWin.register_atclose(log.close)
-        controlWin.register_atclose(this_zmq.close)
-        sys.exit(app.exec())
+        ret = app.exec()
 
-    print("No camera found, please connect")
-    sys.exit(app.exec())
+    if this_zmq: this_zmq.close()
+    sys.exit(ret)
 
 def reader():
     iDevice = 0
@@ -68,8 +85,14 @@ def reader():
             if init_dict: dcam.prop_setfromdict(init_dict)
 
         camreader = DCamReader(dcam)
-        this_zmq = zmq_publisher()
-        camreader.register_callback(this_zmq.publish)
+        try:
+            # this_zmq = zmq_publisher()
+            this_zmq = shmem_publisher(size=MAX_SIZE)
+        except Exception as e:
+            print(e)
+            this_zmq = None
+        else:
+            camreader.register_callback(this_zmq.publish)
 
         camreader.open_camera()
 
@@ -92,10 +115,12 @@ def reader():
 
         print("closing")
         camreader.quit()
+        if this_zmq: this_zmq.close()
 
 def saver():
 
-    read_zmq = zmq_reader()
+    # read_zmq = zmq_reader()
+    read_zmq = shmem_reader()
 
     app = QtW.QApplication(sys.argv)
     this = CamSaver(read_zmq.oneshot,read_zmq.multishot)
@@ -106,7 +131,8 @@ def saver():
 
 def display():
 
-    this_zmq = zmq_reader(ratelimit=0.01)
+    # this_zmq = zmq_reader(ratelimit=0.01)
+    this_zmq = shmem_reader(ratelimit=0.01)
 
     app = QtW.QApplication(sys.argv)
     this = ImageUpdater()
