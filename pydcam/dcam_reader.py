@@ -8,25 +8,32 @@
     This imports some common functions, makes some common defines and implements some of
     the C++ examples from the DCAM SDK4.
 """
+import asyncio
 from pathlib import Path
 import sys
-from pydcam.api.dcam import *
-import pydcam.api.dcam_extra as dapi
-
+import pydcam
 import time
 import threading
 import numpy
-from pydcam.utils.numpy_circ_buf import thread_buf
+
+from pydcam.api.dcam import *
+import pydcam.api.dcam_extra as dapi
+
+from pydcam.utils.asyncio_circ_buf import asyncio_buf
 from pydcam.utils.cb_thread import CallbackThread
+from pydcam.utils.cb_asyncio import CallbackCoroutine
 
 
-def my_wait(secs,start_time=None):
+
+async def my_wait(secs,start_time=None):
     if start_time is None:
-        time.sleep(secs)
+        await asyncio.sleep(secs)
     else:
         waittime = secs-(time.time()-start_time)
-        if waittime > 0:
-            time.sleep(waittime)
+        if waittime > 0.01:
+            await asyncio.sleep(waittime)
+        else:
+            return
 
 def busy_wait(secs,start_time=None):
     if start_time is None:
@@ -35,20 +42,26 @@ def busy_wait(secs,start_time=None):
     while time.time() < start_time + secs:
         pass
 
-class pub_thread(CallbackThread):
-    def __init__(self, src_buf:thread_buf, ratelimit=0):
+class pub_worker(CallbackCoroutine):
+    def __init__(self, src_buf:asyncio_buf, ratelimit=0):
         super().__init__(startpaused=True, ratelimit=ratelimit)
         self.src_buf = src_buf
 
-    def get_data(self):
-        return self.src_buf.get_latest(block=1, copy=1)
+    async def get_data(self):
+        return await self.src_buf.get_latest(block=1, copy=1)
+
+    async def pause(self):
+        self.wait_while_paused.clear()
+        self._pause = True
+        self.src_buf.cancel_wait()
+        await self.wait_until_paused.wait()
 
     def stop(self):
         super().stop()
         self.src_buf.cancel_wait()
 
-class cam_thread(threading.Thread):
-    def __init__(self, dcam:Dcam, dst_buf:thread_buf):
+class cam_worker:
+    def __init__(self, dcam:Dcam, dst_buf:asyncio_buf):
         super().__init__()
         self.dcam = dcam
         self.dst_buf = dst_buf
@@ -61,33 +74,36 @@ class cam_thread(threading.Thread):
 
         self.fps_cb = None
 
-        self.wait_while_paused = threading.Event()
+        self.wait_while_paused = asyncio.Event()
         self.wait_while_paused.clear()
-        self.wait_until_paused = threading.Event()
+        self.wait_until_paused = asyncio.Event()
         self.wait_until_paused.set()
     
     def set_fps_cb(self,func):
         if callable(func):
             self.fps_cb = func
 
-    def run(self):
+    async def run(self):
 
         if self.dcam is None:
             return
-
+        print("satrting cam run")
         lastupdate = time.time()
         while(self.go):
             
             # check for pause flag
             if self._pause:
                 self.wait_until_paused.set()
-                self.wait_while_paused.wait()
+                print("paused cam coro")
+                await self.wait_while_paused.wait()
+                print("unpaused cam coro")
                 self.wait_until_paused.clear()
 
             if not self.go:
                 break
             # retval = self.dcam.wait_again()
-            retval = self.dcam.wait_capevent_frameready(3000)
+            loop = asyncio.get_event_loop()
+            retval = await loop.run_in_executor(None, self.dcam.wait_capevent_frameready, 3000)
             if retval is False:
                 if self.dcam.lasterr() == DCAMERR.ABORT:
                     print("received the abort signal")
@@ -129,14 +145,16 @@ class cam_thread(threading.Thread):
                 if self.fps_cb is not None:
                     self.fps_cb(self.fps)
             lastupdate = now
+        print("ending cam run")
 
-    def pause(self):
+    async def pause(self):
         self.wait_while_paused.clear()
         self._pause = True
         self.dcam.wait_abort()
-        self.wait_until_paused.wait()
+        await self.wait_until_paused.wait()
 
     def unpause(self):
+        self._pause = False
         self.wait_while_paused.set()
 
     def stop(self):
@@ -144,8 +162,8 @@ class cam_thread(threading.Thread):
         self.unpause()
         self.dcam.wait_abort()
 
-class cam_sim(threading.Thread):
-    def __init__(self, dst_buf, im_size=(200,200)):
+class cam_sim:
+    def __init__(self, dst_buf:asyncio_buf, im_size=(200,200)):
         super().__init__()
 
         self.dst_buf = dst_buf
@@ -155,41 +173,49 @@ class cam_sim(threading.Thread):
 
         self.fps_cb = None
 
-        self.exptime = 1 
+        self.exptime = 1
 
         self.imsize = im_size
 
-        self.wait = threading.Event()
-
-        self.wait_while_paused = threading.Event()
+        self.wait_while_paused = asyncio.Event()
         self.wait_while_paused.clear()
-        self.wait_until_paused = threading.Event()
+        self.wait_until_paused = asyncio.Event()
         self.wait_until_paused.set()
     
     def set_fps_cb(self,func):
         if callable(func):
             self.fps_cb = func
 
-    def run(self):
-
-        lastupdate = time.time()
+    async def run(self):
 
         self.resize(self.imsize)
         cnt = 0
-        now = time.time()
+        lastupdate = time.time()
         while(self.go):
             # wait image
             if self._pause:
                 self.wait_until_paused.set()
-                self.wait_while_paused.wait()
+                print("paused cam coro")
+                await self.wait_while_paused.wait()
+                print("unpaused cam coro")
                 self.wait_until_paused.clear()
-            my_wait(self.exptime, now)
-            now = time.time()
+            if not self.go:
+                break
+            
+            print("waiting for exp time")
+            # if self.exptime > 0.02:
+            await my_wait(self.exptime, lastupdate)
+            # now = time.time()
             # print("got frame...")
             temp = self.temp[cnt%100]
-            temp[:,(cnt)%self.imsize[1]] = 2500
+            # temp[:,(cnt)%self.imsize[1]] = 2500
             # self.dst_buf.copy_numpy(temp)
+            print("copying buf")
+            # try:
             self.dst_buf.copy_from_address(temp.ctypes.data_as(c_void_p), temp.nbytes)
+            # except Exception as e:
+            #     print(e)
+            print("buf copied")
             # try:
             #     self.dcam.buf_getframe_withnp(-1,self.dst_buf.get_to_fill())
             # except Exception as e:
@@ -197,19 +223,26 @@ class cam_sim(threading.Thread):
             # else:
             #     self.dst_buf.inc_last_filled()
 
-            now2 = time.time()
-            self.fps = 1/(now2-lastupdate)
-            if self.fps_cb is not None:
-                self.fps_cb(self.fps)
-            lastupdate = now2
+            now = time.time()
+            try:
+                self.fps = 1/(now-lastupdate)
+            except ZeroDivisionError as e:
+                print(e)
+            else:
+                if self.fps_cb is not None:
+                    self.fps_cb(self.fps)
+            lastupdate = now
             cnt += 1
+        print("camsin run ended")
 
-    def pause(self):
+    async def pause(self):
         self.wait_while_paused.clear()
         self._pause = True
-        self.wait_until_paused.wait()
+        self.dcam.wait_abort()
+        await self.wait_until_paused.wait()
 
     def unpause(self):
+        self._pause = False
         self.wait_while_paused.set()
 
     def stop(self):
@@ -236,7 +269,6 @@ class DCamReader():
         self.running = 0
 
     def thread_buffer_init(self):
-
         framebytes = self.dcam.prop_getvalue(DCAM_IDPROP.BUFFER_FRAMEBYTES)
         width = self.dcam.prop_getvalue(DCAM_IDPROP.IMAGE_WIDTH)
         height = self.dcam.prop_getvalue(DCAM_IDPROP.IMAGE_HEIGHT)
@@ -247,12 +279,18 @@ class DCamReader():
             sys.exit()
         dtype = "uint16" if pxltype == 2 else "uint8"
         print("dtype = ",dtype,pxltype)
-        self.buffers = thread_buf(shape, 10, dtype)
-        self.publisher = pub_thread(self.buffers)
-        self.camera = cam_thread(self.dcam, self.buffers)
+        self.buffers = asyncio_buf(shape, 10, dtype)
+        self.publisher = pub_worker(self.buffers)
+        self.camera = cam_worker(self.dcam, self.buffers)
 
-        self.publisher.start()
-        self.camera.start()
+        # self.event_loop = asyncio.new_event_loop()
+        # asyncio.set_event_loop(self.event_loop)
+        # self.event_loop.run_forever()
+        # asyncio.run()
+        # self.event_thread = threading.Thread(target=self.event_loop.run_until_complete, args=(self.run_coros(),))
+        # self.event_thread.start()
+        asyncio.run_coroutine_threadsafe(self.publisher.run(), pydcam.EVENT_LOOP)
+        asyncio.run_coroutine_threadsafe(self.camera.run(), pydcam.EVENT_LOOP)
 
     def resize_thread_buffer(self):
 
@@ -286,14 +324,14 @@ class DCamReader():
             print(f"Error in cap_start() -> {self.dcam.lasterr().name}")
         else:
             print( "Start Capture" )
-            self.publisher.unpause()
-            self.camera.unpause()
+            pydcam.EVENT_LOOP.call_soon_threadsafe(self.publisher.unpause)
+            pydcam.EVENT_LOOP.call_soon_threadsafe(self.camera.unpause)
             self.running = 1
 
     def close_camera(self):
 
-        self.publisher.pause()
-        self.camera.pause()
+        asyncio.run_coroutine_threadsafe(self.publisher.pause(), pydcam.EVENT_LOOP)
+        asyncio.run_coroutine_threadsafe(self.camera.pause(), pydcam.EVENT_LOOP)
 
         # stop capture
         self.dcam.cap_stop()
@@ -307,14 +345,14 @@ class DCamReader():
 
     def quit(self):
         print("Stopping publisher thread...")
-        self.publisher.stop()
+        pydcam.EVENT_LOOP.call_soon_threadsafe(self.publisher.stop)
         print("Stopping camera thread...")
-        self.camera.stop()
+        pydcam.EVENT_LOOP.call_soon_threadsafe(self.camera.stop)
 
-        print("Joining publisher thread...")
-        self.publisher.join()
-        print("Joining camera thread...")
-        self.camera.join()
+        # print("Joining publisher thread...")
+        # self.publisher.join()
+        # print("Joining camera thread...")
+        # self.camera.join()
 
         # release buffer
         print("Releasing buffer...")
@@ -427,17 +465,16 @@ class DCamReader():
         self.publisher.set_zmq(value)
 
     def register_callback(self, func):
-        pass
         return self.publisher.register(func)
 
     def deregister_callback(self, fid):
         self.publisher.deregister(fid)
 
-    def get_image(self):
-        return self.publisher.oneshot()
+    async def get_image(self):
+        return await self.publisher.oneshot()
 
-    def get_images(self,n=1):
-        return self.publisher.multishot(n)
+    async def get_images(self,n=1):
+        return await self.publisher.multishot(n)
 
     def get_window_info(self):
         ids = [ DCAM_IDPROP.SUBARRAYHSIZE, DCAM_IDPROP.SUBARRAYHPOS, DCAM_IDPROP.SUBARRAYVSIZE, DCAM_IDPROP.SUBARRAYVPOS, DCAM_IDPROP.EXPOSURETIME ]
@@ -477,16 +514,16 @@ class DCamSim():
 
         self.running = 0
 
-    def thread_buffer_init(self,imdim):
+    # def thread_buffer_init(self, imdim):
 
-        buf_size = int(imdim[0]*imdim[1]*2)
+    #     buf_size = int(imdim[0]*imdim[1]*2)
 
-        self.buffers = thread_buf(buf_size, 10, 16, imdim)
-        self.publisher = pub_thread(self.buffers)
-        self.camera = cam_sim(self.buffers,im_size=imdim)
+    #     self.buffers = asyncio_buf(imdim, 10, "uint16")
+    #     self.publisher = pub_worker(self.buffers)
+    #     self.camera = cam_sim(self.buffers,im_size=imdim)
 
-        self.publisher.start()
-        self.camera.start()
+    #     asyncio.run_coroutine_threadsafe(self.publisher.run(), pydcam.EVENT_LOOP)
+    #     asyncio.run_coroutine_threadsafe(self.camera.run(), pydcam.EVENT_LOOP)
         
     def thread_buffer_init(self):
 
@@ -495,12 +532,14 @@ class DCamSim():
         shape = (int(height),int(width))
         dtype = "uint16"
 
-        self.buffers = thread_buf(shape, 10, dtype)
-        self.publisher = pub_thread(self.buffers)
+        self.buffers = asyncio_buf(shape, 10, dtype)
+        self.publisher = pub_worker(self.buffers)
         self.camera = cam_sim(self.buffers, im_size=shape)
 
-        self.publisher.start()
-        self.camera.start()
+        self.pubfut = asyncio.run_coroutine_threadsafe(self.publisher.run(), pydcam.EVENT_LOOP)
+        self.pubfut.add_done_callback(print)
+        self.camfut = asyncio.run_coroutine_threadsafe(self.camera.run(), pydcam.EVENT_LOOP)
+        self.camfut.add_done_callback(print)
         
     def resize_thread_buffer(self):
 
@@ -516,40 +555,52 @@ class DCamSim():
         
         self.resize_thread_buffer()
         
-        self.publisher.unpause()
-        self.camera.unpause()
+        pydcam.EVENT_LOOP.call_soon_threadsafe(self.publisher.unpause)
+        pydcam.EVENT_LOOP.call_soon_threadsafe(self.camera.unpause)
 
         self.running = 1
 
     def close_camera(self):
         # abort signal to dcamwait_start
 
-        self.publisher.pause()
-        self.camera.pause()
+        asyncio.run_coroutine_threadsafe(self.publisher.pause(), pydcam.EVENT_LOOP)
+        asyncio.run_coroutine_threadsafe(self.camera.pause(), pydcam.EVENT_LOOP)
 
         self.running = 0
 
         print( "PROGRAM PAUSE" )
 
     def quit(self):
-        self.publisher.stop()
-        self.camera.stop()
+        print("Stopping publisher thread...")
+        pydcam.EVENT_LOOP.call_soon_threadsafe(self.publisher.stop)
+        print("Stopping camera thread...")
+        pydcam.EVENT_LOOP.call_soon_threadsafe(self.camera.stop)
 
-        self.publisher.join()
-        self.camera.join()
+        # self.publisher.join()
+        # self.camera.join()
 
         self.running = 0
 
         print("PROGRAM END")
 
     def get_info(self):
-        return "Sim Camera", "Version 1", "This information is unnecessary"
+        info = {"MODEL":"Sim Camera","CAMERAID":"Version 1","BUS":"This information is unnecessary"}
+        return info
 
     def get_info_detail(self):
-        return None
+        return self.get_info()
 
     def set_exposure(self,exp_time):
         self.camera.exptime = exp_time
+
+    def get_exposure(self):
+        return self.camera.exptime
+
+    def set_subarray_pos(self, hpos, vpos):
+        self.set_subarray(self.hsize,self.vsize,hpos,vpos)
+
+    def set_subarray_size(self,hsize,vsize):
+        self.set_subarray(hsize,vsize,self.hpos,self.vpos)
 
     def set_subarray(self, hsize, vsize, hpos, vpos):
 
@@ -571,11 +622,11 @@ class DCamSim():
     def deregister_callback(self, fid):
         self.publisher.deregister(fid)
 
-    def get_image(self):
-        return self.publisher.oneshot()
+    async def get_image(self):
+        return await self.publisher.oneshot()
 
-    def get_images(self,n=1):
-        return self.publisher.multishot(n)
+    async def get_images(self,n=1):
+        return await self.publisher.multishot(n)
 
     def get_window_info(self):
         keys = ["SUBARRAY HSIZE","SUBARRAY HPOS","SUBARRAY VSIZE","SUBARRAY VPOS","EXPOSURE TIME"]
@@ -592,6 +643,7 @@ class DCamSim():
 
     def reset_buffer_head(self):
         self.buffers.reset_head()
+
 
 
 if __name__ == "__main__":
@@ -617,6 +669,7 @@ if __name__ == "__main__":
         camreader = DCamReader(dcam)
         this_zmq = zmq_publisher()
         camreader.register_callback(this_zmq.publish)
+        # camreader.register_callback(print)
 
         camreader.open_camera()
 

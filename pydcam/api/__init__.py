@@ -24,3 +24,19 @@ class OpenCamera:
         print("Closing the Dcamapi")
         Dcamapi.uninit()
         return False
+    
+
+class OpenAravis:
+    def __init__(self, iDevice):
+        self.iDevice = iDevice
+
+    def __enter__(self):
+        pass
+        # load the ARAVIS driver
+        # get a camera handle using name self.iDevice
+        # retrurn cam handle
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+        # close the camera handle
+        # unload the aravis driver

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 import os
 import sys
 import numpy
@@ -19,6 +20,7 @@ from functools import partial
 
 from pathlib import Path
 
+import pydcam
 from pydcam.dcam_display import ImageDisplay
 from pydcam.utils.zmq_pubsub import zmq_reader
 from pydcam.utils.runnable import MyRunnable
@@ -241,14 +243,14 @@ class CamSaver(QtW.QWidget):
 
     def savebutton_callback(self,event):
         self.statuslabel.setText("Working...")
-        saver = MyRunnable(self.saveimages)
-        QtC.QThreadPool.globalInstance().start(saver)
+        asyncio.run_coroutine_threadsafe(self.saveimages(),pydcam.EVENT_LOOP)
 
     def set_can_save(self,func):
         if callable(func):
             self.can_save = func
 
-    def saveimages(self):
+    async def saveimages(self):
+        print("Saving images")
         if not self.can_save():
             self.statuslabel.setText("Can't save yet...")
             return
@@ -257,9 +259,11 @@ class CamSaver(QtW.QWidget):
         if N == 0:
             return
         elif N == 1:
-            self.images = self.get_one()
+            print("awaiting self get one")
+            self.images = await self.get_one()
         elif self.continouscheck.isChecked():
-            images = self.get_multiple(N)
+            print("awaiting self get multiple")
+            images = await self.get_multiple(N)
             self.images = list_to_numpy(images)
             print("Got images")
         else:
@@ -268,7 +272,8 @@ class CamSaver(QtW.QWidget):
             now = time.time()
             for n in range(N):
                 my_wait(s,now)
-                images.append(self.get_one())
+                print("awaiting self get one")
+                images.append(await self.get_one())
                 now = time.time()
             self.images = list_to_numpy(images)
             print("Got images")
@@ -301,17 +306,20 @@ class CamSaver(QtW.QWidget):
         text += fname
         self.filenamepreview.setText(text)
 
-    def get_one(self):
+    async def get_one(self):
         if self.get_one_callback is not None:
-            return self.get_one_callback()
+            print("awaiting get one cb")
+            return await self.get_one_callback()
 
-    def get_multiple(self,n):
+    async def get_multiple(self,n):
         if self.get_multiple_callback is not None:
-            return self.get_multiple_callback(n)
+            print("awaiting get mult cb")
+            return await self.get_multiple_callback(n)
         else:
             data = deque()
             for i in range(n):
-                data.append(self.get_one())
+                print("awaiting self get one")
+                data.append(await self.get_one())
             return data
 
     def save_many_hdf5(self, timestamp=""):

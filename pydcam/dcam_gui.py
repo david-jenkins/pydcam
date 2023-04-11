@@ -9,9 +9,9 @@ from PyQt5 import QtWidgets as QtW
 
 from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, registerParameterType
 
-from pydcam.dcam_reader import DCamReader, DCamSim
+# from pydcam.dcam_reader import DCamReader, DCamSim
+from pydcam import DCamReader, CamSaver
 from pydcam.dcam_display import ImageUpdater
-from pydcam.dcam_saver import CamSaver
 from pydcam import open_config
 
 class ConsoleLog(QtW.QMainWindow):
@@ -230,6 +230,7 @@ class ControlWindow(QtW.QWidget):
 
     def stop_camera(self):
         if self.camreader.get_running():
+            print("CLICKED Stop Camera")
             self.camreader.close_camera()
             self.camerafps_reset()
 

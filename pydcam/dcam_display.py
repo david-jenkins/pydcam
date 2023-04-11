@@ -793,10 +793,10 @@ class CamDisplay(QtW.QWidget):
 if __name__ == "__main__":
 
     from pydcam.utils.zmq_pubsub import zmq_reader
-    from pydcam.utils.shmem import shmem_reader
+    from pydcam.utils.shmem import shmem_reader, shmem_reader_async
 
     # this_zmq = zmq_reader(ratelimit=0.05)
-    this_zmq = shmem_reader(ratelimit=0.05)
+    this_zmq = shmem_reader_async(ratelimit=0.05)
 
     app = QtW.QApplication(sys.argv)
     
