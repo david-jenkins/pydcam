@@ -51,15 +51,14 @@ class shmem_publisher():
         if cnt == 1:
             print("Last user so closing")
             self.shmem_header.unlink()
+            self.shmem_block.unlink()
         else:
             self.info[3] = cnt-1
         del self.info
         del self.header
 
         self.shmem_header.close()
-
         self.shmem_block.close()
-        self.shmem_block.unlink()
 
 class _shmem_reader_mixin:
     def __init__(self, name='hama1234', ratelimit=0):
@@ -83,7 +82,7 @@ class _shmem_reader_mixin:
         self.name = name
         self.shm_go = True
         self.size = 0
-        self.shmem_block = None
+        self.shmem_block:shmem.SharedMemory = None
         self.fno = -1
 
     def stop(self,*args):
@@ -96,6 +95,8 @@ class _shmem_reader_mixin:
         if cnt == 1:
             print("Last user so closing")
             self.shmem_header.unlink()
+            if self.shmem_block is not None:
+                self.shmem_block.unlink()
         else:
             self.info[3] = cnt-1
         self.shm_go = False
@@ -141,7 +142,7 @@ class shmem_reader_async(_shmem_reader_mixin, CallbackCoroutine):
             nbytes, dtype, shape = orjson.loads(self.header[:hdr_size])
             arr = numpy.ndarray(shape=shape, dtype=dtype, buffer=self.shmem_block.buf[:nbytes]).copy()
             self.fno = self.info[0]
-            return self.fno, arr
+            return arr
 
     def __exit__(self, *args):
         retval = super().__exit__(*args)

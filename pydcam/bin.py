@@ -7,12 +7,14 @@ from pathlib import Path
 import pydcam
 from pydcam import CamSaver, DCamReader, LoopRunner, DCamSim
 from pydcam.dcam_gui import ControlWindow, ConsoleLog
-from pydcam.api import OpenCamera
+from pydcam.api import OpenCamera, OpenAravis
 from pydcam.api.dcamapi4 import DCAM_IDPROP
 from pydcam import open_config
 from pydcam.dcam_display import ImageUpdater
 from pydcam.utils.zmq_pubsub import zmq_reader, zmq_publisher
 from pydcam.utils.shmem import shmem_publisher, shmem_reader
+
+from pydcam.aravis_reader import AravisReader
 
 MAX_SIZE = 2304*2304*2
 
@@ -72,6 +74,55 @@ def gui():
         if this_zmq: this_zmq.close()
     sys.exit(ret)
 
+def arvgui():
+    with LoopRunner() as EL:
+        iDevice = "EVT-HB-1800SM-640002"
+
+        # fname = None
+        # if len(sys.argv) > 1:
+        #     fname = Path(sys.argv[1]).resolve()
+
+        app = QtW.QApplication(sys.argv)
+
+        log = None
+
+        print("Looking for Camera, please wait....")
+
+        with OpenAravis(iDevice) as dcam:
+            print("Got camera ", dcam)
+            if dcam is None:
+                print("No camera found, please connect")
+                if log:
+                    sys.exit(app.exec())
+                sys.exit()
+            # dcam.prop_setdefaults()
+            # if fname is not None:
+            #     init_dict = open_config(fname)
+            #     if init_dict: dcam.prop_setfromdict(init_dict)
+
+            reader = AravisReader(dcam)
+
+            this_zmq = zmq_publisher()
+            # this_zmq = shmem_publisher(size=MAX_SIZE)
+
+            reader.register_callback(this_zmq.publish)
+    
+            controlWin = ControlWindow(reader)
+            
+            log = ConsoleLog()
+            log.set_as_stdout()
+            log.set_as_stderr()
+            
+            controlWin.register_atclose(log.close)
+
+            controlWin.show()
+            log.show()
+            
+            ret = app.exec()
+
+        if this_zmq: this_zmq.close()
+    sys.exit(ret)
+
 def simgui():
     with LoopRunner() as EL:
         iDevice = 0
@@ -92,26 +143,35 @@ def simgui():
 
         # reader = DCamReader(dcam)
         reader = DCamSim()
+        print("DCAM sim made")
         try:
+            print("Making publisher")
             # this_zmq = zmq_publisher()
+            print("Publisher made")
             this_zmq = shmem_publisher(size=MAX_SIZE)
             # this_zmq = dfhs
         except Exception as e:
             print(e)
             this_zmq = None
         else:
+            print("registering callback")
             reader.register_callback(this_zmq.publish)
+            print("Callback registered")
 
-        try:
-            controlWin = ControlWindow(reader)
-        except Exception as e:
-            print(e)
-        else:
-            # controlWin.register_atclose(log.close)
-            controlWin.show()
-
+        # try:
+        print("making control win")
+        controlWin = ControlWindow(reader)
+        print("Control win made")
+        # except Exception as e:
+        #     print("Control win failed")
+        #     print(e)
+        # else:
+        #     # controlWin.register_atclose(log.close)
+        #     print("shwoign control win")
+        controlWin.show()
+        print("execing app")
         ret = app.exec()
-
+        print("app is execed")
         if this_zmq: this_zmq.close()
     sys.exit(ret)
 
@@ -200,5 +260,6 @@ def test():
             print(e)
 
 if __name__ == "__main__":
-    simgui()
+    # simgui()
+    arvgui()
     # test()

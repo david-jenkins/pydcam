@@ -1,6 +1,7 @@
 
+from enum import IntEnum
 from pydcam.api.dcam import Dcamapi, Dcam
-
+from pydcam.api.aravis import ArvCam
 class OpenCamera:
     def __init__(self, iDevice):
         self.iDevice = iDevice
@@ -24,19 +25,37 @@ class OpenCamera:
         print("Closing the Dcamapi")
         Dcamapi.uninit()
         return False
-    
+
 
 class OpenAravis:
     def __init__(self, iDevice):
         self.iDevice = iDevice
 
     def __enter__(self):
-        pass
-        # load the ARAVIS driver
-        # get a camera handle using name self.iDevice
-        # retrurn cam handle
+        self.acam = ArvCam(self.iDevice)
+        if self.acam.dev_open() is False:
+            print("No Camera available")
+            return None
+        return self.acam
 
     def __exit__(self, exc_type, exc_value, traceback):
-        pass
-        # close the camera handle
-        # unload the aravis driver
+        return False
+    
+    
+class CAMINFO(IntEnum):
+    DeviceVendorName = 0
+    DeviceModelName = 1
+    DeviceVersion = 2
+    DeviceSerialNumber = 3
+    DeviceFirmareVersion = 4
+    DeviceUserName = 5
+    DeviceBus = 6
+    
+    
+class REGIONINFO(IntEnum):
+    Width = 0
+    Height = 1
+    OffsetX = 2
+    OffsetY = 3
+    Exposure = 4
+    FrameRate = 5

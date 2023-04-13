@@ -10,7 +10,14 @@ from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 import pyqtgraph as pg
 
-from pysinewave import BeatWave, SineWave
+try:
+    from pysinewave import BeatWave, SineWave
+except ModuleNotFoundError as e:
+    print(e)
+    BeatWave = False
+    
+BeatWave = False
+USE_SOUND = bool(BeatWave)
 
 from superqt import QRangeSlider, QLabeledRangeSlider, QLabeledSlider
 
@@ -291,6 +298,7 @@ class ImageDisplay_base(QtW.QWidget):
         self.showsatbutton.setCheckable(True)
 
         self.audiofeedback_button = QtW.QPushButton("Audio Feedback")
+        self.audiofeedback_button.setHidden(not USE_SOUND)
 
         self.buttonlayout = QtW.QGridLayout()
         self.buttonlayout.addWidget(self.updatebutton,0,0,1,2)
@@ -339,9 +347,9 @@ class ImageDisplay(ImageDisplay_base):
         self.showsatbutton.toggled.connect(self.togglesat)
         self.togglesat(False)
 
-        
-        self.audiowidget = AudioFeedback()
-        self.audiofeedback_button.clicked.connect(self.audiowidget.show)
+        if USE_SOUND:
+            self.audiowidget = AudioFeedback()
+            self.audiofeedback_button.clicked.connect(self.audiowidget.show)
 
         self.resetisospincallback()
         self.resetsatspincallback()
@@ -460,6 +468,12 @@ class ImageDisplay(ImageDisplay_base):
                 return
             self.process_data()
 
+    def is_audiowidget_running(self):
+        if not USE_SOUND:
+            return False
+        else:
+            return self.audiowidget.is_running()
+
     def process_data(self):
         data = self.data
         if len(self.data.shape)==3:
@@ -468,7 +482,7 @@ class ImageDisplay(ImageDisplay_base):
         if self.roibutton.isChecked():
             self.roi_data = numpy.fliplr(self.roi.getArrayRegion(data, self.image.imageItem))
             data = self.roi_data
-        if self.audiowidget.is_running():
+        if self.is_audiowidget_running():
             self.audiowidget.updatetone(numpy.amax(data),numpy.mean(data),numpy.median(data))
         if self.showisobutton.isChecked():
             self.iso_data = pg.gaussianFilter(data, (2, 2))
@@ -511,7 +525,7 @@ class ImageDisplay(ImageDisplay_base):
             im = im[index]
         if self.roibutton.isChecked():
             im = self.roi_data = numpy.fliplr(self.roi.getArrayRegion(im, self.image.imageItem))
-        if self.audiowidget.is_running():
+        if self.is_audiowidget_running():
             self.audiowidget.updatetone(numpy.amax(im),numpy.mean(im),numpy.median(im))
         self.update_isocurve(im)
         self.update_satimage(im)
@@ -557,7 +571,7 @@ class ImageDisplay(ImageDisplay_base):
         print("Closing ImageDisplay")
         self.stop_worker_thread()
         print("Worker thread ended")
-        self.audiowidget.close()
+        if USE_SOUND: self.audiowidget.close()
         return super().closeEvent(a0)
 
 class ImageUpdater(QtW.QWidget):
@@ -614,7 +628,7 @@ class ImageUpdater(QtW.QWidget):
             self.timer.stop()
         if obj is self and event.type() == QtC.QEvent.Show:
             print("Starting viewer")
-            self.timer.start(20)
+            self.timer.start(100)
         return super().eventFilter(obj, event)
 
     def get_roi_info(self):
@@ -795,8 +809,8 @@ if __name__ == "__main__":
     from pydcam.utils.zmq_pubsub import zmq_reader
     from pydcam.utils.shmem import shmem_reader, shmem_reader_async
 
-    # this_zmq = zmq_reader(ratelimit=0.05)
-    this_zmq = shmem_reader_async(ratelimit=0.05)
+    this_zmq = zmq_reader(ratelimit=0.05)
+    # this_zmq = shmem_reader_async(ratelimit=0.05)
 
     app = QtW.QApplication(sys.argv)
     

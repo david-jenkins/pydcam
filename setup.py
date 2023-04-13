@@ -34,7 +34,7 @@ setuptools.setup(
           'h5py',
           'orjson',
           'pysinewave@git+https://github.com/david-jenkins/pysinewave',
-          'superqt@git+https://github.com/napari/superqt',
+          'superqt@git+https://github.com/pyapp-kit/superqt',
       ],
     # dependency_links=[
     #     'git+git://github.com/pyqtgraph/pyqtgraph.git@master',

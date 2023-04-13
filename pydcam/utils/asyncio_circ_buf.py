@@ -53,9 +53,7 @@ class asyncio_buf():
         self.full_bufs = min(self.full_bufs + 1,self.count)
         self.unread_bufs = (self.unread_bufs + 1)
         ctypes.memmove(self.bufs[self.last_filled].ctypes.data_as(ctypes.c_void_p), address, self.size)
-        print("setting wait in copy")
         self.wait.set()
-        print("wait set in copy")
 
     def copy_numpy(self, array:numpy.ndarray):
         if array.shape != self.bufs.shape[1:]:
@@ -65,6 +63,22 @@ class asyncio_buf():
         self.full_bufs = min(self.full_bufs + 1,self.count)
         self.unread_bufs = (self.unread_bufs + 1)
         self.bufs[self.last_filled] = numpy.copy(array)
+        self.wait.set()
+        
+    def frombuffer(self, buffer):
+        # print("Getting from buffer!")
+        if len(buffer) < self.size:
+            print("Not enough buffer")
+            return None
+        # elif len(buffer) > self.size:
+            # print("too much buffer, truncating")
+            # buffer = buffer[:self.size]
+        self.last_filled = (self.last_filled + 1)%self.count
+        self.full_bufs = min(self.full_bufs + 1,self.count)
+        self.unread_bufs = (self.unread_bufs + 1)
+        inarr = numpy.frombuffer(buffer, dtype=self.dtype,count=self.size)
+        inarr.shape = self.shape
+        self.bufs[self.last_filled] = inarr
         self.wait.set()
 
     def get_to_fill(self):

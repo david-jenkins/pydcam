@@ -2,6 +2,7 @@
 
 from functools import partial
 from numpy import array
+from pydcam.api import CAMINFO
 from pydcam.api.dcam import *
 import toml
 import yaml
@@ -22,13 +23,14 @@ def printf_attr(count, name):
 def dcamcon_show_dcamdev_info( dcam:Dcam ):
 
     info = {}
-    keys = [DCAM_IDSTR.MODEL, DCAM_IDSTR.CAMERAID, DCAM_IDSTR.BUS]
+    keys = [CAMINFO.DeviceModelName, CAMINFO.DeviceSerialNumber, CAMINFO.DeviceBus]
+    ids = [DCAM_IDSTR.MODEL, DCAM_IDSTR.CAMERAID, DCAM_IDSTR.BUS]
 
-    for key in keys:
-        info[key.name] = dcam.dev_getstring(key)
+    for idx,key in zip(ids,keys):
+        info[key.name] = dcam.dev_getstring(idx)
         if info[key.name] is False:
             print(f"Error in show info ({key.name}) -> ", dcam.lasterr().name)
-    print(f"{info['MODEL']} ({info['CAMERAID']}) on {info['BUS']}")
+    print(f"{info['DeviceModelName']} ({info['DeviceSerialNumber']}) on {info['DeviceBus']}")
 
     return info
 

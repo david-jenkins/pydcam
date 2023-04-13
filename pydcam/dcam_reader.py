@@ -16,6 +16,7 @@ import time
 import threading
 import numpy
 
+from pydcam.api import REGIONINFO
 from pydcam.api.dcam import *
 import pydcam.api.dcam_extra as dapi
 
@@ -30,10 +31,10 @@ async def my_wait(secs,start_time=None):
         await asyncio.sleep(secs)
     else:
         waittime = secs-(time.time()-start_time)
-        if waittime > 0.01:
+        if waittime > 0.0:
             await asyncio.sleep(waittime)
         else:
-            return
+            await asyncio.sleep(0)
 
 def busy_wait(secs,start_time=None):
     if start_time is None:
@@ -56,9 +57,10 @@ class pub_worker(CallbackCoroutine):
         self.src_buf.cancel_wait()
         await self.wait_until_paused.wait()
 
-    def stop(self):
-        super().stop()
-        self.src_buf.cancel_wait()
+    async def stop(self):
+        await self.pause()
+        self._go = False
+        self.unpause()
 
 class cam_worker:
     def __init__(self, dcam:Dcam, dst_buf:asyncio_buf):
@@ -202,7 +204,7 @@ class cam_sim:
             if not self.go:
                 break
             
-            print("waiting for exp time")
+            # print("waiting for exp time")
             # if self.exptime > 0.02:
             await my_wait(self.exptime, lastupdate)
             # now = time.time()
@@ -210,12 +212,12 @@ class cam_sim:
             temp = self.temp[cnt%100]
             # temp[:,(cnt)%self.imsize[1]] = 2500
             # self.dst_buf.copy_numpy(temp)
-            print("copying buf")
+            # print("copying buf")
             # try:
             self.dst_buf.copy_from_address(temp.ctypes.data_as(c_void_p), temp.nbytes)
             # except Exception as e:
             #     print(e)
-            print("buf copied")
+            # print("buf copied")
             # try:
             #     self.dcam.buf_getframe_withnp(-1,self.dst_buf.get_to_fill())
             # except Exception as e:
@@ -485,11 +487,12 @@ class DCamReader():
         return values
 
     def get_window_info_dict(self):
+        keys = [ REGIONINFO.Width, REGIONINFO.Height, REGIONINFO.OffsetX, REGIONINFO.OffsetY, REGIONINFO.Exposure ]
         ids = [ DCAM_IDPROP.SUBARRAYHSIZE, DCAM_IDPROP.SUBARRAYHPOS, DCAM_IDPROP.SUBARRAYVSIZE, DCAM_IDPROP.SUBARRAYVPOS, DCAM_IDPROP.EXPOSURETIME ]
         values = {}
-        for idprop in ids:
+        for idprop,key in zip(ids,keys):
             value, vmin, vmax = self.dcam.prop_getvalueminmax(idprop)
-            values[idprop.name] = [value,vmin,vmax]
+            values[key] = [value,vmin,vmax]
         return values
 
     def get_running(self):
@@ -584,7 +587,7 @@ class DCamSim():
         print("PROGRAM END")
 
     def get_info(self):
-        info = {"MODEL":"Sim Camera","CAMERAID":"Version 1","BUS":"This information is unnecessary"}
+        info = {"DeviceModelName":"Sim Camera","DeviceSerialNumber":"Version 1","DeviceBus":"This information is unnecessary"}
         return info
 
     def get_info_detail(self):
@@ -630,12 +633,13 @@ class DCamSim():
 
     def get_window_info(self):
         keys = ["SUBARRAY HSIZE","SUBARRAY HPOS","SUBARRAY VSIZE","SUBARRAY VPOS","EXPOSURE TIME"]
-        values = [(self.camera.imsize[0],0,2000),(2,1,3),(self.camera.imsize[1],0,2000),(2,1,3),(self.camera.exptime,0,10)]
+        values = [(self.camera.imsize[0],0,2000),(2,1,3),(self.camera.imsize[1],0,2000),(2,1,3),(self.camera.exptime,0,10),(1/self.camera.exptime,1/10,10000)]
         return values
 
     def get_window_info_dict(self):
-        keys = ["SUBARRAYHSIZE","SUBARRAYHPOS","SUBARRAYVSIZE","SUBARRAYVPOS","EXPOSURETIME"]
-        values = [(self.camera.imsize[0],0,2000),(2,1,3),(self.camera.imsize[1],0,2000),(2,1,3),(self.camera.exptime,0,10)]
+        keys = [ REGIONINFO.Width, REGIONINFO.Height, REGIONINFO.OffsetX, REGIONINFO.OffsetY, REGIONINFO.Exposure, REGIONINFO.FrameRate ]
+        # keys = ["SUBARRAYHSIZE","SUBARRAYHPOS","SUBARRAYVSIZE","SUBARRAYVPOS","EXPOSURETIME"]
+        values = [(self.camera.imsize[0],0,2000),(2,1,3),(self.camera.imsize[1],0,2000),(2,1,3),(self.camera.exptime,0,10),(1/self.camera.exptime,1/10,10000)]
         return dict(zip(keys,values))
 
     def get_running(self):

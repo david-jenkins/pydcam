@@ -11,6 +11,8 @@ from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, reg
 
 # from pydcam.dcam_reader import DCamReader, DCamSim
 from pydcam import DCamReader, CamSaver
+from pydcam.aravis_reader import AravisReader
+from pydcam.api import REGIONINFO
 from pydcam.dcam_display import ImageUpdater
 from pydcam import open_config
 
@@ -58,7 +60,7 @@ class ConsoleLog(QtW.QMainWindow):
 class ControlWindow(QtW.QWidget):
     camfps_signal = QtC.pyqtSignal(float)
     disfps_signal = QtC.pyqtSignal(float)
-    def __init__(self, reader:DCamReader, parent = None):
+    def __init__(self, reader:AravisReader, parent = None):
         super().__init__(parent=parent)
         self.setWindowFlags(QtC.Qt.Window)
         self.parameters = [
@@ -76,7 +78,8 @@ class ControlWindow(QtW.QWidget):
                 {'name':'Set Dimensions', 'type':'action', 'tip':'Use to set Window Parameters'},
                 {'name':'Set Fullframe', 'type':'action', 'tip':'Use to set Window Parameters'},
                 {'name':'Exposure Time (s)', 'type':'float', 'value':0, 'limits':[0.0001,10]},
-                {'name':'Exposure Time (ms)', 'type':'float', 'value':0, 'limits':[1,10000]}
+                {'name':'Exposure Time (ms)', 'type':'float', 'value':0, 'limits':[1,10000]},
+                {'name':'FrameRate (Hz)', 'type':'int', 'value':0, 'limits':[1,10000]}
             ]},
             {'name':'Frame Rates','type':'group','children':[
                 {'name':'Camera Frame Rate', 'type':'float', 'value':0, 'readonly':True},
@@ -136,6 +139,7 @@ class ControlWindow(QtW.QWidget):
         self.paramgroup.param('Camera Setup').param('Set Fullframe').sigActivated.connect(self.setFullFrame)
         self.paramgroup.param('Camera Setup').param('Exposure Time (s)').sigValueChanged.connect(self.setExposureTime)
         self.paramgroup.param('Camera Setup').param('Exposure Time (ms)').sigValueChanged.connect(self.setExposureTime)
+        self.paramgroup.param('Camera Setup').param('FrameRate (Hz)').sigValueChanged.connect(self.setFrameRate)
 
         self.installEventFilter(self)
 
@@ -182,8 +186,8 @@ class ControlWindow(QtW.QWidget):
 
     def setFullFrame(self):
         window_info = self.camreader.get_window_info_dict()
-        w = window_info["SUBARRAYHSIZE"][2]
-        h = window_info["SUBARRAYVSIZE"][2]
+        w = window_info[REGIONINFO.Width][2]
+        h = window_info[REGIONINFO.Height][2]
         pw = 0
         ph = 0
         print(f"Setting full frame to {w},{h} at {pw},{ph}")
@@ -204,13 +208,17 @@ class ControlWindow(QtW.QWidget):
         print(ts,tms)
         self.camreader.set_exposure(ts)
 
+    def setFrameRate(self,event):
+        fr = self.paramgroup.param('Camera Setup').param('FrameRate (Hz)').value()
+        self.camreader.set_frame_rate(fr)
+
     def start_camera(self):
         if self.camreader.get_running():
             return
         self.camreader.open_camera()
         camera_params = self.camreader.get_info()
-        self.paramgroup.param('Camera Information').param('Camera Model').setValue(camera_params["MODEL"])
-        self.paramgroup.param('Camera Information').param('Serial Number').setValue(camera_params["CAMERAID"])
+        self.paramgroup.param('Camera Information').param('Camera Model').setValue(camera_params["DeviceModelName"])
+        self.paramgroup.param('Camera Information').param('Serial Number').setValue(camera_params["DeviceSerialNumber"])
         self.set_window_info()
 
     def set_window_info(self):
@@ -227,6 +235,8 @@ class ControlWindow(QtW.QWidget):
 
         self.paramgroup.param('Camera Setup').param('Exposure Time (ms)').setValue(window_info[4][0]*1000., blockSignal=self.setExposureTime)
         self.paramgroup.param('Camera Setup').param('Exposure Time (s)').setValue(window_info[4][0], blockSignal=self.setExposureTime)
+        
+        self.paramgroup.param('Camera Setup').param('FrameRate (Hz)').setValue(window_info[5][0])
 
     def stop_camera(self):
         if self.camreader.get_running():

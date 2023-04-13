@@ -90,6 +90,7 @@ class CallbackCoroutine:
                         continue
                 self.callbacks(cb_data)
         self.wait_until_paused.set()
+        print("Callback Coro ended")
 
     async def pause(self):
         self.wait_while_paused.clear()
@@ -100,13 +101,10 @@ class CallbackCoroutine:
         self._pause = False
         self.wait_while_paused.set()
 
-    def stop(self):
+    async def stop(self):
+        await self.pause()
         self._go = False
         self.unpause()
-
-    async def stop_and_wait(self):
-        self.stop()
-        await self.wait_until_paused.wait()
 
     def register(self, func):
         fid = str(id(func))
@@ -155,10 +153,10 @@ class CallbackCoroutine:
     async def start(self):
         await self.run()
 
-    # def __enter__(self):
-    #     self.thread = threading.Thread(target=asyncio.run,args=(self.start(),))
-    #     self.thread.start()
+    def __enter__(self):
+        self.thread = threading.Thread(target=asyncio.run,args=(self.start(),))
+        self.thread.start()
 
-    # def __exit__(self,*args):
-    #     self.stop()
-    #     self.thread.join()
+    def __exit__(self,*args):
+        self.stop()
+        self.thread.join()

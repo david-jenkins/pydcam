@@ -16,13 +16,13 @@ from pydcam.dcam_reader import DCamReader, DCamSim
 from pydcam.dcam_saver import CamSaver
 from pydcam.utils.runnable import MyRunnable
 
+import threading
+
 class LoopRunner:
-    def __enter__(self):
+    def __enter__(self) -> asyncio.BaseEventLoop:
         self.EVENT_LOOP = asyncio.new_event_loop()
-        # event_thread = threading.Thread(target=self.EVENT_LOOP.run_forever)
-        # event_thread.start()
-        event_runnable = MyRunnable(self.EVENT_LOOP.run_forever)
-        QtC.QThreadPool.globalInstance().start(event_runnable)
+        self.event_thread = threading.Thread(target=self.EVENT_LOOP.run_forever)
+        self.event_thread.start()
         global EVENT_LOOP
         EVENT_LOOP = self.EVENT_LOOP
         return self.EVENT_LOOP
@@ -30,7 +30,11 @@ class LoopRunner:
     def __exit__(self, *args):
         for task in asyncio.all_tasks(self.EVENT_LOOP):
             task.cancel()
+            if not task.done(): task.set_result(None)
         self.EVENT_LOOP.call_soon_threadsafe(self.EVENT_LOOP.stop)
+        print(args)
+        self.event_thread.join()
+        return False
 
 def open_config(file_path=""):
     if not Path(file_path).is_absolute():
