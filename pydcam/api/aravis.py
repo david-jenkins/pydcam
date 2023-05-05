@@ -66,10 +66,11 @@ class ArvCam:
         try:
             self.camhandle = Aravis.Camera.new (self.iDevice)
             self.camhandle.set_integer("FrameRate",10)
-            self.camhandle.set_region (0,0,400,400)
+            self.camhandle.set_region (336,428,400,400)
             self.camhandle.set_integer ("Exposure", 5000)
             self.camhandle.set_pixel_format (Aravis.PIXEL_FORMAT_MONO_8)
             self.camhandle.gv_auto_packet_size()
+            self.camhandle.gv_set_packet_size(9000)
             self.camhandle.gv_set_stream_options(Aravis.GvStreamOption.NONE)
             self.camhandle.gv_select_stream_channel(-1)
             self.camhandle.gv_set_packet_delay(-1)
@@ -140,8 +141,26 @@ class ArvCam:
     def get_integer_bounds(self, name):
         return self.camhandle.get_integer_bounds(name)
     
+    def get_integer_step(self, name):
+        return self.camhandle.get_integer_increment(name)
+    
+    def check_integer(self, name, value):
+        bounds = self.get_integer_bounds(name)
+        step = self.get_integer_step(name)
+        print("Checking ", name)
+        print(f"{value=}, {bounds.min=}, {bounds.max=}, {step}")
+        print(f"{value<bounds.min=} or {value>bounds.max=} or {(value-bounds.min)%step=}")
+        if value<bounds.min or value>bounds.max or (value-bounds.min)%step:
+            return False
+        else:
+            return True
+    
     def set_region(self, x, y, width, height):
-        self.camhandle.set_region(x,y,width,height)
+        if self.check_integer("Width",width) and self.check_integer("Height",height) and self.check_integer("OffsetX",x) and self.check_integer("OffsetY",y):
+            self.camhandle.set_region(x,y,width,height)
+            print("setting region to ",x,y,width,height)
+        else:
+            print("Region Error")
     
     def get_payload(self):
         return self.camhandle.get_payload()
@@ -213,7 +232,7 @@ class ArvCam:
     def cap_stop(self):
         print("STOPPING CAP")
         self.camhandle.stop_acquisition()
-        self.stream.stop_thread(True)
+        if self.stream is not None: self.stream.stop_thread(True)
     
 def print_info(arvcam:ArvCam):
     keys = ['DeviceVendorName','DeviceModelName','DeviceVersion','DeviceSerialNumber','DeviceFirmwareVersion','DeviceUserName']
@@ -248,9 +267,16 @@ def test():
     
     for i in range(5):
         buffer = acam.get_data()
-        print("got data ", buffer, acam.get_status())
+        print("got data len ", len(buffer), acam.get_status())
 
     acam.cap_stop()
+
     
 if __name__ == "__main__":
-    test()
+    # test()
+    print("Starting camera")
+    acam = ArvCam("EVT-HB-1800SM-640002")
+    acam.dev_open()
+    
+    camera = acam.camhandle
+    features = get_features(camera,"Root")

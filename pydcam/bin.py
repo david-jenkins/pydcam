@@ -1,10 +1,9 @@
-
+#!/home/alascartc/djenkins/pytest/bin/python
 
 import sys
 import time
 from PyQt5 import QtWidgets as QtW
 from pathlib import Path
-import pydcam
 from pydcam import CamSaver, DCamReader, LoopRunner, DCamSim
 from pydcam.dcam_gui import ControlWindow, ConsoleLog
 from pydcam.api import OpenCamera, OpenAravis
@@ -140,7 +139,6 @@ def simgui():
         # log.set_as_stderr()
         # log.show()
 
-
         # reader = DCamReader(dcam)
         reader = DCamSim()
         print("DCAM sim made")
@@ -252,14 +250,16 @@ def display():
 
 
 def test():
+    import pydcam
     with LoopRunner() as EL:
         print(EL)
         try:
-            print(pydcam.EVENT_LOOP)
+            print(pydcam.get_event_loop())
         except Exception as e:
             print(e)
 
 if __name__ == "__main__":
-    # simgui()
-    arvgui()
+    simgui()
+    # arvgui()
     # test()
+    # gui()

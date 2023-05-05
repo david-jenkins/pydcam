@@ -4,6 +4,10 @@ import asyncio
 import threading
 import time
 
+import numpy
+
+from pydcam.utils import LoopRunner, list_to_numpy
+
 class CallbackQueue_async(dict):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
@@ -48,7 +52,7 @@ class CallbackQueue(dict):
             except:
                 poplater.append(fid)
         for key in poplater:
-            super().pop(key, None)
+            self.pop(key)
 
 class CallbackCoroutine:
     def __init__(self, startpaused=False, ratelimit=0):
@@ -65,6 +69,7 @@ class CallbackCoroutine:
         self.wait_while_paused.clear()
         self.wait_until_paused = asyncio.Event()
         self.wait_until_paused.set()
+        
 
     def set_ratelimit(self, ratelimit):
         self.ratelimit = ratelimit
@@ -129,7 +134,7 @@ class CallbackCoroutine:
             raise Exception()
         self.register(wrapper)
 
-    async def multishot(self, n):
+    async def multishot(self, n, ndarray=False):
         ready = asyncio.Event()
         self.multishot_return = []
         def func(data, done):
@@ -138,6 +143,9 @@ class CallbackCoroutine:
                 ready.set()
         self.multishot_callback(func, n)
         await ready.wait()
+        if ndarray:
+            if isinstance(self.multishot_return[0],numpy.ndarray):
+                return list_to_numpy(self.multishot_return)
         return self.multishot_return
 
     def multishot_callback(self, func, n):
@@ -154,9 +162,10 @@ class CallbackCoroutine:
         await self.run()
 
     def __enter__(self):
-        self.thread = threading.Thread(target=asyncio.run,args=(self.start(),))
-        self.thread.start()
+        # self.thread = threading.Thread(target=asyncio.run,args=(self.start(),))
+        # self.thread.start()
+        self.runfut = LoopRunner.run_coroutine(self.start())
 
     def __exit__(self,*args):
         self.stop()
-        self.thread.join()
+        # self.thread.join()

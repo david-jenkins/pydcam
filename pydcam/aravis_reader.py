@@ -1,7 +1,7 @@
 
-import threading
 import asyncio
-import pydcam
+from pydcam import LoopRunner
+from pydcam.utils import ParamInfo
 from pydcam.api import REGIONINFO
 from pydcam.api.aravis import ArvCam, print_info
 from pydcam.utils.asyncio_circ_buf import asyncio_buf
@@ -36,8 +36,7 @@ class cam_worker:
             return
         print("satrting cam run")
         lastupdate = time.time()
-        
-        loop = asyncio.get_event_loop()
+
         while(self.go):
             
             # check for pause flag
@@ -52,7 +51,7 @@ class cam_worker:
                 print("ending cam thread")
                 return None
             
-            buf = await loop.run_in_executor(None, self.acam.get_data)
+            buf = await LoopRunner.run_in_executor(self.acam.get_data)
             if buf is None:
                 continue
 
@@ -116,8 +115,8 @@ class AravisReader:
         self.publisher = pub_worker(self.buffers)
         self.camera = cam_worker(self.acam, self.buffers)
 
-        self.pubfut = asyncio.run_coroutine_threadsafe(self.publisher.run(), pydcam.EVENT_LOOP)
-        self.camfut = asyncio.run_coroutine_threadsafe(self.camera.run(), pydcam.EVENT_LOOP)
+        self.pubfut = LoopRunner.run_coroutine(self.publisher.run())
+        self.camfut = LoopRunner.run_coroutine(self.camera.run())
         
     def resize_thread_buffer(self):
 
@@ -138,8 +137,8 @@ class AravisReader:
             print(f"Error in cap_start()")
         else:
             print( "Start Capture" )
-            pydcam.EVENT_LOOP.call_soon_threadsafe(self.publisher.unpause)
-            pydcam.EVENT_LOOP.call_soon_threadsafe(self.camera.unpause)
+            LoopRunner.call_soon(self.publisher.unpause)
+            LoopRunner.call_soon(self.camera.unpause)
             self.running = True
             print("CAPSTARTED")
 
@@ -147,8 +146,8 @@ class AravisReader:
 
         print("CLOSING")
 
-        pubfut = asyncio.run_coroutine_threadsafe(self.publisher.pause(), pydcam.EVENT_LOOP)
-        camfut = asyncio.run_coroutine_threadsafe(self.camera.pause(), pydcam.EVENT_LOOP)
+        pubfut = LoopRunner.run_coroutine(self.publisher.pause())
+        camfut = LoopRunner.run_coroutine(self.camera.pause())
 
         try:
             pubfut.result()
@@ -168,9 +167,9 @@ class AravisReader:
     def quit(self):
                 
         print("Stopping publisher thread...")
-        pubfut = asyncio.run_coroutine_threadsafe(self.publisher.stop(), pydcam.EVENT_LOOP)
+        pubfut = LoopRunner.run_coroutine(self.publisher.stop())
         print("Stopping camera thread...")
-        camfut = asyncio.run_coroutine_threadsafe(self.camera.stop(), pydcam.EVENT_LOOP)
+        camfut = LoopRunner.run_coroutine(self.camera.stop())
         
         print("waiting for threads")
         pubfut.result()
@@ -213,7 +212,7 @@ class AravisReader:
         return await self.publisher.oneshot()
 
     async def get_images(self,n=1):
-        return await self.publisher.multishot(n)
+        return await self.publisher.multishot(n,ndarray=True)
     
     def get_running(self):
         return bool(self.running)
@@ -234,6 +233,10 @@ class AravisReader:
         self.acam.set_region(xoff,yoff,width,height)
         self.open_camera()
         
+    def set_subarray_pos(self, hpos, vpos):
+        region = self.acam.get_region()
+        self.set_subarray(region.width,region.height,hpos,vpos)
+        
     def set_publish(self,value=True):
         self.publisher.set_zmq(value)
     
@@ -244,10 +247,10 @@ class AravisReader:
         for tid,key in zip(ids,keys):
             value = self.acam.get_integer(tid)
             vmin, vmax = self.acam.get_integer_bounds(tid)
-            values[key] = [value,vmin,vmax]
-        values[REGIONINFO.Exposure][0] /= 1e6
-        values[REGIONINFO.Exposure][1] /= 1e6
-        values[REGIONINFO.Exposure][2] /= 1e6
+            step = self.acam.get_integer_step(tid)
+            values[key] = ParamInfo(value,vmin,vmax,step)
+        exp = values[REGIONINFO.Exposure]
+        values[REGIONINFO.Exposure] = ParamInfo(exp.value/1e6, exp.min/1e6, exp.max/1e6, exp.step/1e6)
         return values
     
     def get_window_info(self):

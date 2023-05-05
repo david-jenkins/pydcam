@@ -4,7 +4,7 @@ import sys
 import threading
 import numpy
 import time
-import PyQt5
+
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
@@ -224,36 +224,69 @@ class ImageSigCapture():
             return wrap
         else:
             return attr1
+        
+        
+class MyImageView(pg.ImageView):
+    def __init__(self, parent=None, name="ImageView", view=None, imageItem=None, levelMode='mono', discreteTimeLine=False, roi=None, normRoi=None, *args):
+        super().__init__(parent, name, view, imageItem, levelMode, discreteTimeLine, roi, normRoi, *args)
+        self._use_bg = False
+        self.bgAction = QtW.QAction("Use background", self.menu)
+        self.bgAction.setCheckable(True)
+        self.bgAction.setChecked(False)
+        self.bgAction.toggled.connect(self.bgToggled)
+        
+    def bgToggled(self, action):
+        self._use_bg = action
+        
+    def useBg(self):
+        return self._use_bg
 
-class ImageDisplay_base(QtW.QWidget):
+    def buildMenu(self):
+        super().buildMenu()
+        self.menu.addAction(self.bgAction)
+
+class ImageDisplayUI(QtW.QWidget):
     def __init__(self,parent=None):
         super().__init__(parent=parent)
         self.mainlayout = QtW.QGridLayout()
 
-        self.image = pg.ImageView()
+        # define main plot 
+        self.image = MyImageView()
+        
+        self.sat_image = pg.ImageItem()
+        self.image.getView().addItem(self.sat_image)
+        
+        # define roi plot
         self.roi_gview = pg.GraphicsView()
         self.roi_view = pg.ViewBox(lockAspect=True)
         self.roi_gview.setCentralItem(self.roi_view)
-        self.sat_image = pg.ImageItem()
+        
         self.roi_image = pg.ImageItem()
         self.roi_sat_image = pg.ImageItem()
         # self.roi = pg.PolygonROI(((0,0),(0,20),(20,20),(20,0)),pen=(0,9))
-        self.roi = pg.RectROI((100,100),(100,100),pen=(0,9))
+        self.roi = pg.RectROI((100,100),(100,100),pen=(0,9),sideScalers=True, scaleSnap=True, translateSnap=True)
+        self.roi.handles[0]["lockAspect"] = True
         self.roi.addRotateHandle([1,0], [0.5, 0.5])
-        self.image.getView().addItem(self.sat_image)
+        # self.roi.addScaleHandle([1,1], [0, 0], lockAspect=True)
+        
         self.roi_view.addItem(self.roi_image)
         self.roi_view.addItem(self.roi_sat_image)
-        self.image.getView().addItem(self.roi)
-        self.roi.hide()
+        
+        
+        # update histogram
         self.imsigcap = ImageSigCapture(self.image.imageItem,self.roi_image)
         hist = self.image.getHistogramWidget()
         hist.setImageItem(self.imsigcap)
         hist.setHistogramRange(0,1000)
         hist.vb.invertX()
+        
+        self.image.getView().addItem(self.roi)
+        self.roi.hide()
+        
         self.mainlayout.addWidget(self.roi_gview,0,0,1,1)
         self.mainlayout.addWidget(self.image,0,1,1,1)
-        self.mainlayout.setColumnStretch(0,2)
-        self.mainlayout.setColumnStretch(1,3)
+        # self.mainlayout.setColumnStretch(0,2)
+        # self.mainlayout.setColumnStretch(1,3)
 
         self.isocurve = pg.IsocurveItem(level=200, pen='g')
         self.isocurve.setParentItem(self.image.getImageItem())
@@ -275,11 +308,23 @@ class ImageDisplay_base(QtW.QWidget):
         self.satLine.setValue(65217)
         self.satLine.setZValue(1000) # bring iso line above contrast controls
 
-        self.updatebutton = QtW.QPushButton("Update Image Limits")
+        self.updatebutton = QtW.QPushButton("Update Limits")
         self.resetviewbutton = QtW.QPushButton("Reset View")
 
+        self.roibox = QtW.QGroupBox()
+        
         self.roibutton = QtW.QPushButton("Update ROI")
         self.roibutton.setCheckable(True)
+        
+        self.resetroibutton = QtW.QPushButton("Reset ROI")
+        
+        self.roilay = QtW.QGridLayout()
+        self.roilay.addWidget(self.roibutton,0,0,1,1)
+        self.roilay.addWidget(self.resetroibutton,0,1,1,1)
+        
+        self.roibox.setLayout(self.roilay)
+
+        self.isobox = QtW.QGroupBox()
 
         self.showisobutton = QtW.QPushButton("Isocurve")
         self.showisobutton.setCheckable(True)
@@ -288,40 +333,72 @@ class ImageDisplay_base(QtW.QWidget):
         self.isospin.setRange(0,65536)
         self.isospin.setSingleStep(10)
         self.resetisospin = QtW.QPushButton("Reset")
+        
+        self.isolay = QtW.QGridLayout()
+        self.isolay.addWidget(self.showisobutton,0,0,1,2)
+        self.isolay.addWidget(self.isospin,1,0,1,1)
+        self.isolay.addWidget(self.resetisospin,1,1,1,1)
+        
+        self.isobox.setLayout(self.isolay)
+        
+        self.satbox = QtW.QGroupBox()
+        
+        self.showsatbutton = QtW.QPushButton("Saturation")
+        self.showsatbutton.setCheckable(True)
 
         self.satspin = QtW.QSpinBox()
         self.satspin.setRange(0,65536)
         self.satspin.setSingleStep(10)
         self.resetsatspin = QtW.QPushButton("Reset")
 
-        self.showsatbutton = QtW.QPushButton("Saturation")
-        self.showsatbutton.setCheckable(True)
+        self.satlay = QtW.QGridLayout()
+        self.satlay.addWidget(self.showsatbutton,0,0,1,2)
+        self.satlay.addWidget(self.satspin,1,0,1,1)
+        self.satlay.addWidget(self.resetsatspin,1,1,1,1)
+        
+        self.satbox.setLayout(self.satlay)
 
-        self.audiofeedback_button = QtW.QPushButton("Audio Feedback")
+        self.audiofeedback_button = QtW.QPushButton("Audio")
         self.audiofeedback_button.setHidden(not USE_SOUND)
 
         self.buttonlayout = QtW.QGridLayout()
-        self.buttonlayout.addWidget(self.updatebutton,0,0,1,2)
-        self.buttonlayout.addWidget(self.resetviewbutton,0,2,1,2)
-        self.buttonlayout.addWidget(self.showisobutton,0,4,1,2)
-        self.buttonlayout.addWidget(self.showsatbutton,0,6,1,2)
-        self.buttonlayout.addWidget(self.audiofeedback_button,0,8,1,2)
-
-        self.buttonlayout.addWidget(self.roibutton,1,0,1,2)
-        self.buttonlayout.addWidget(self.isospin,1,4,1,1)
-        self.buttonlayout.addWidget(self.satspin,1,6,1,1)
-
-        self.buttonlayout.addWidget(self.resetisospin,1,5,1,1)
-        self.buttonlayout.addWidget(self.resetsatspin,1,7,1,1)
+        
+        self.buttonlayout.addWidget(self.isobox,0,0,2,2)
+        
+        self.buttonlayout.addWidget(self.satbox,0,2,2,2)
+        
+        self.buttonlayout.addWidget(self.roibox,2,0,1,1)
+        self.buttonlayout.addWidget(self.updatebutton,2,1,1,1)
+        self.buttonlayout.addWidget(self.resetviewbutton,2,2,1,1)
+        
+        self.buttonlayout.addWidget(self.audiofeedback_button,2,3,1,1)
 
         self.mainlayout.addLayout(self.buttonlayout,1,0,1,2)
+        # self.mainlayout.setColumnStretch(0,1)
+        # self.mainlayout.setColumnStretch(1,2)
         self.setLayout(self.mainlayout)
+        
+    def singlePane(self):
+        self.roi_gview.hide()
+        self.mainlayout.setColumnStretch(0,0)
+        self.mainlayout.setColumnStretch(1,1)
+        self.adjustSize()
+        self.resize(self.image.size().width(),self.size().height())
+        
+    def twoPane(self):
+        self.roi_gview.show()
+        self.mainlayout.setColumnStretch(0,1)
+        self.mainlayout.setColumnStretch(1,1)
+        self.adjustSize()
+        self.resize(2*self.image.size().width(),self.size().height())
 
-class ImageDisplay(ImageDisplay_base):
+class ImageDisplay(ImageDisplayUI):
     updateSig = QtC.pyqtSignal()
     updateIsoSat = QtC.pyqtSignal()
-    def __init__(self,parent=None):
+    def __init__(self,parent=None, control=None):
         super().__init__(parent=parent)
+
+        self.control = control
 
         self.im_size = 100,100
 
@@ -334,6 +411,8 @@ class ImageDisplay(ImageDisplay_base):
         self.resetviewbutton.clicked.connect(self.autoRange)
 
         self.roibutton.clicked.connect(self.roibutton_callback)
+        
+        self.resetroibutton.clicked.connect(self.resetroi)
 
         self.showisobutton.toggled.connect(self.toggleisocurve)
         self.toggleisocurve(False)
@@ -370,6 +449,8 @@ class ImageDisplay(ImageDisplay_base):
         self.worker_thread = None
         
         self.relimit = True
+        
+        self.singlePane()
 
         self.update_once(numpy.zeros((2,2)))
 
@@ -478,7 +559,14 @@ class ImageDisplay(ImageDisplay_base):
         data = self.data
         if len(self.data.shape)==3:
             data = data[0]
-        self.im_data = self.data
+        bg = None
+        if self.image.useBg() and self.control is not None:
+            bg = self.control.get_background()
+        if bg is not None: 
+            self.im_data = self.data-bg
+        else:
+            self.image.bgAction.setChecked(False)
+            self.im_data = self.data
         if self.roibutton.isChecked():
             self.roi_data = numpy.fliplr(self.roi.getArrayRegion(data, self.image.imageItem))
             data = self.roi_data
@@ -560,12 +648,19 @@ class ImageDisplay(ImageDisplay_base):
             self.image.getView().removeItem(self.sat_image)
             self.roi_view.addItem(self.sat_image)
             self.isocurve.setParentItem(self.roi_image)
+            self.twoPane()
         else:
             self.roi.hide()
             self.roi_view.removeItem(self.sat_image)
             self.image.getView().addItem(self.sat_image)
             self.isocurve.setParentItem(self.image.getImageItem())
+            self.singlePane()
         self.update_overlay()
+        
+    def resetroi(self):
+        self.roi.setAngle(0)
+        self.roi.setPos((10,10))
+        self.roi.setSize((100,100))
 
     def closeEvent(self, a0: QtG.QCloseEvent) -> None:
         print("Closing ImageDisplay")
@@ -577,11 +672,11 @@ class ImageDisplay(ImageDisplay_base):
 class ImageUpdater(QtW.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.imageview = ImageDisplay()
+        self.imageview = ImageDisplay(control=parent)
         self.setLayout(QtW.QGridLayout())
         self.layout().addWidget(self.imageview)
 
-        self.resize(1200, 600)
+        self.resize(1000, 600)
 
         self.fps_cb = None
         self.lastupdate = time.time()
@@ -640,6 +735,87 @@ class ImageUpdater(QtW.QWidget):
     def closeEvent(self, a0: QtG.QCloseEvent) -> None:
         self.imageview.close()
         return super().closeEvent(a0)
+    
+    
+
+class ImageViewer(QtW.QWidget):
+    def __init__(self):
+        super().__init__()
+        self.resize(800,600)
+        self.mainlayout = QtW.QVBoxLayout()
+        self.setLayout(self.mainlayout)
+        self.image = ImageDisplay()
+        self.image.setUpdateOnChange()
+        self.mainlayout.addWidget(self.image)
+
+        self.controlbar = QtW.QWidget()
+        self.buttonlayout = QtW.QHBoxLayout()
+        self.controlbar.setLayout(self.buttonlayout)
+        self.mainlayout.addWidget(self.controlbar)
+
+        self.firstbutton = QtW.QPushButton("First")
+        self.firstbutton.clicked.connect(self.first_callback)
+        self.buttonlayout.addWidget(self.firstbutton)
+
+        self.prevbutton = QtW.QPushButton("Prev")
+        self.prevbutton.clicked.connect(self.prev_callback)
+        self.buttonlayout.addWidget(self.prevbutton)
+
+        self.playpausebutton = QtW.QPushButton("Play")
+        self.playpausebutton.setCheckable(True)
+        self.playpausebutton.toggled.connect(self.playpause_callback)
+        self.buttonlayout.addWidget(self.playpausebutton)
+
+        self.nextbutton = QtW.QPushButton("Next")
+        self.nextbutton.clicked.connect(self.next_callback)
+        self.buttonlayout.addWidget(self.nextbutton)
+
+        self.lastbutton = QtW.QPushButton("Last")
+        self.lastbutton.clicked.connect(self.last_callback)
+        self.buttonlayout.addWidget(self.lastbutton)
+
+    def update(self,data):
+        self.image.relimitimage()
+        if len(data.shape) == 3:
+            self.image_count = data.shape[0]
+            # self.image.setImage(numpy.transpose(data,axes=(0,2,1)),xvals=numpy.arange(self.image_count)+1)
+            self.image.old_update(numpy.transpose(data,axes=(0,2,1)))
+            self.controlbar.show()
+        else:
+            self.image_count = 1
+            # self.image.setImage(data.T)
+            self.image.old_update(data.T)
+            self.controlbar.hide()
+
+    def first_callback(self):
+        self.image.relimitimage()
+        self.image.image.setCurrentIndex(0)
+
+    def prev_callback(self):
+        currind = self.image.image.currentIndex
+        if currind==0:
+            self.last_callback()
+        else:
+            self.image.relimitimage()
+            self.image.image.jumpFrames(-1)
+
+    def next_callback(self):
+        currind = self.image.image.currentIndex
+        if currind>=self.image_count-1:
+            self.first_callback()
+        else:
+            self.image.relimitimage()
+            self.image.image.jumpFrames(+1)
+
+    def last_callback(self):
+        self.image.relimitimage()
+        self.image.image.setCurrentIndex(self.image_count-1)
+
+    def playpause_callback(self, event):
+        if event:
+            self.image.image.play(1)
+        else:
+            self.image.image.play(0)
 
 class CamDisplay(QtW.QWidget):
     plotsignal = QtC.pyqtSignal()

@@ -6,6 +6,8 @@ import PyQt5
 from PyQt5 import QtCore as QtC 
 from PyQt5 import QtGui as QtG
 from PyQt5 import QtWidgets as QtW
+import numpy
+from pydcam.utils import LoopRunner
 
 from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, registerParameterType
 
@@ -13,7 +15,7 @@ from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, reg
 from pydcam import DCamReader, CamSaver
 from pydcam.aravis_reader import AravisReader
 from pydcam.api import REGIONINFO
-from pydcam.dcam_display import ImageUpdater
+from pydcam.dcam_display import ImageUpdater, ImageViewer
 from pydcam import open_config
 
 class ConsoleLog(QtW.QMainWindow):
@@ -60,6 +62,7 @@ class ConsoleLog(QtW.QMainWindow):
 class ControlWindow(QtW.QWidget):
     camfps_signal = QtC.pyqtSignal(float)
     disfps_signal = QtC.pyqtSignal(float)
+    bgdone_signal = QtC.pyqtSignal()
     def __init__(self, reader:AravisReader, parent = None):
         super().__init__(parent=parent)
         self.setWindowFlags(QtC.Qt.Window)
@@ -104,12 +107,27 @@ class ControlWindow(QtW.QWidget):
         self.opendisplaybutton = QtW.QPushButton("Open Display")
         self.opendisplaybutton.clicked.connect(self.show_display)
         self.buttonlayout.addWidget(self.opendisplaybutton)
+        self.takebackgroundbutton = QtW.QPushButton("Take Background")
+        self.takebackgroundbutton.clicked.connect(self.take_background_callback)
+        self.takebackgroundlabel = QtW.QLabel("Frames")
+        self.takebackgroundspin = QtW.QSpinBox()
+        self.takebackgroundspin.setValue(2)
+        self.takebackgroundspin.setRange(1,100)
+        self.takebackgroundbox = QtW.QGroupBox()
+        self.takebackgroundlay = QtW.QGridLayout()
+        self.takebackgroundlay.addWidget(self.takebackgroundbutton,0,0,1,2)
+        self.takebackgroundlay.addWidget(self.takebackgroundlabel,1,0,1,1)
+        self.takebackgroundlay.addWidget(self.takebackgroundspin,1,1,1,1)
+        self.takebackgroundbox.setLayout(self.takebackgroundlay)
+        self.buttonlayout.addWidget(self.takebackgroundbox)
         self.loadconfigbutton = QtW.QPushButton("Load Config")
         self.loadconfigbutton.clicked.connect(self.load_config)
         self.buttonlayout.addWidget(self.loadconfigbutton)
         self.opensaverbutton = QtW.QPushButton("Open Image Saver")
         self.opensaverbutton.clicked.connect(self.show_saver)
         self.buttonlayout.addWidget(self.opensaverbutton)
+        
+        self.buttonlayout.addStretch(1)
 
         self.mainlayout.addLayout(self.buttonlayout)
         self.setLayout(self.mainlayout)
@@ -144,10 +162,44 @@ class ControlWindow(QtW.QWidget):
         self.installEventFilter(self)
 
         self.closefuncs = []
+        
+        self.background = None
+        self.bgdone_signal.connect(self.plot_bg)
 
         # self.timer = QtC.QTimer()
         # self.timer.timeout.connect(QtW.QApplication.processEvents)
         # self.timer.start(100)
+        
+    def take_background_callback(self):
+        nimages = self.takebackgroundspin.value()
+        fut = LoopRunner.run_coroutine(self.take_background(nimages))
+        fut.add_done_callback(self.take_background_done)
+        
+    async def take_background(self, nimages=10):
+        self.ims = await self.camreader.get_images(nimages)
+    
+    def take_background_done(self, future):
+        imarray = numpy.zeros((10,*self.ims[0].shape),dtype=self.ims[0].dtype)
+        for i,im in enumerate(self.ims):
+            imarray[i] = im
+        print(imarray)
+        self.background = imarray.mean(axis=0)
+        self.bgdone_signal.emit()
+
+    def plot_bg(self):
+        self.bgdisplay = ImageViewer()
+        # self.camdisplays.append(self.bgdisplay)
+        self.bgdisplay.setWindowFlags(QtC.Qt.Window)
+        self.bgdisplay.update(self.background)
+        self.register_atclose(self.bgdisplay.close)
+        self.bgdisplay.show()
+        
+    def get_background(self, take=False):
+        if take: self.take_background()
+        return self.background
+    
+    def reset_background(self):
+        self.background = None
 
     def camerafps_callback(self, fps):
         self.camfps_cnt += 1
@@ -181,10 +233,12 @@ class ControlWindow(QtW.QWidget):
         ph = self.paramgroup.param('Camera Setup').param('Position').param('Vertical').value()
         print(w,h,pw,ph)
         self.camreader.set_subarray(w,h,pw,ph)
+        self.reset_background()
         time.sleep(0.5)
         self.set_window_info()
 
     def setFullFrame(self):
+        self.camreader.set_subarray_pos(0, 0)
         window_info = self.camreader.get_window_info_dict()
         w = window_info[REGIONINFO.Width][2]
         h = window_info[REGIONINFO.Height][2]
@@ -192,6 +246,7 @@ class ControlWindow(QtW.QWidget):
         ph = 0
         print(f"Setting full frame to {w},{h} at {pw},{ph}")
         self.camreader.set_subarray(w,h,pw,ph)
+        self.reset_background()
         time.sleep(0.5)
         self.set_window_info()
 
@@ -224,14 +279,23 @@ class ControlWindow(QtW.QWidget):
     def set_window_info(self):
         window_info = self.camreader.get_window_info()
         self.paramgroup.param('Camera Setup').param('Width').setValue(window_info[0][0])
-        self.paramgroup.param('Camera Setup').param('Width').setLimits(window_info[0][1:])
+        self.paramgroup.param('Camera Setup').param('Width').setLimits(window_info[0][1:3])
+        if window_info[0][3] is not None:
+            self.paramgroup.param('Camera Setup').param('Width').setOpts(step=window_info[0][3])
         self.paramgroup.param('Camera Setup').param('Position').param('Horizontal').setValue(window_info[1][0])
-        self.paramgroup.param('Camera Setup').param('Position').param('Horizontal').setLimits(window_info[1][1:])
+        self.paramgroup.param('Camera Setup').param('Position').param('Horizontal').setLimits(window_info[1][1:3])
+        if window_info[1][3] is not None:
+            self.paramgroup.param('Camera Setup').param('Position').param('Horizontal').setOpts(step=window_info[1][3])
+        
 
         self.paramgroup.param('Camera Setup').param('Height').setValue(window_info[2][0])
-        self.paramgroup.param('Camera Setup').param('Height').setLimits(window_info[2][1:])
+        self.paramgroup.param('Camera Setup').param('Height').setLimits(window_info[2][1:3])
+        if window_info[2][3] is not None:
+            self.paramgroup.param('Camera Setup').param('Height').setOpts(step=window_info[2][3])
         self.paramgroup.param('Camera Setup').param('Position').param('Vertical').setValue(window_info[3][0])
-        self.paramgroup.param('Camera Setup').param('Position').param('Vertical').setLimits(window_info[3][1:])
+        self.paramgroup.param('Camera Setup').param('Position').param('Vertical').setLimits(window_info[3][1:3])
+        if window_info[3][3] is not None:
+            self.paramgroup.param('Camera Setup').param('Position').param('Vertical').setOpts(step=window_info[3][3])
 
         self.paramgroup.param('Camera Setup').param('Exposure Time (ms)').setValue(window_info[4][0]*1000., blockSignal=self.setExposureTime)
         self.paramgroup.param('Camera Setup').param('Exposure Time (s)').setValue(window_info[4][0], blockSignal=self.setExposureTime)

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import asyncio
 import os
 import sys
 import numpy
@@ -11,21 +10,21 @@ from datetime import timezone
 from collections import deque
 from astropy.io import fits
 
-from PyQt5 import QtCore as QtC
+from PyQt5 import QtCore as QtC, QtGui
 from PyQt5 import QtGui as QtG
 from PyQt5 import QtWidgets as QtW
+from pydcam.utils import LoopRunner, get_datetime_stamp, list_to_numpy
 import pyqtgraph as pg
 
 from functools import partial
 
 from pathlib import Path
 
-import pydcam
-from pydcam.dcam_display import ImageDisplay
+from pydcam.dcam_display import ImageDisplay, ImageViewer 
 from pydcam.utils.zmq_pubsub import zmq_reader
-from pydcam.utils.runnable import MyRunnable
+from pydcam.utils.runnable import MyRunnable, run_in_background
 
-get_now = partial(datetime.datetime.now, timezone.utc)
+# get_now = partial(datetime.datetime.now, timezone.utc)
 
 def my_wait(secs,start_time=None):
     if start_time is None:
@@ -33,99 +32,6 @@ def my_wait(secs,start_time=None):
     waittime = secs-(time.time()-start_time)
     if waittime > 0:
         time.sleep(waittime)
-
-def list_to_numpy(imlist):
-    if type(imlist) in (list,deque):
-        if len(imlist) == 1:
-            return imlist[0]
-
-        x = numpy.zeros((len(imlist),*(imlist[0].shape)),dtype=imlist[0].dtype)
-        for i,img in enumerate(imlist):
-            x[i] = img
-        return x
-    elif type(imlist) is numpy.ndarray:
-        return imlist
-    else:
-        raise TypeError("list_to_numpy: Type not understood")
-
-class ImageViewer(QtW.QWidget):
-    def __init__(self):
-        super().__init__()
-        self.resize(800,600)
-        self.mainlayout = QtW.QVBoxLayout()
-        self.setLayout(self.mainlayout)
-        self.image = ImageDisplay()
-        self.image.setUpdateOnChange()
-        self.mainlayout.addWidget(self.image)
-
-        self.controlbar = QtW.QWidget()
-        self.buttonlayout = QtW.QHBoxLayout()
-        self.controlbar.setLayout(self.buttonlayout)
-        self.mainlayout.addWidget(self.controlbar)
-
-        self.firstbutton = QtW.QPushButton("First")
-        self.firstbutton.clicked.connect(self.first_callback)
-        self.buttonlayout.addWidget(self.firstbutton)
-
-        self.prevbutton = QtW.QPushButton("Prev")
-        self.prevbutton.clicked.connect(self.prev_callback)
-        self.buttonlayout.addWidget(self.prevbutton)
-
-        self.playpausebutton = QtW.QPushButton("Play")
-        self.playpausebutton.setCheckable(True)
-        self.playpausebutton.toggled.connect(self.playpause_callback)
-        self.buttonlayout.addWidget(self.playpausebutton)
-
-        self.nextbutton = QtW.QPushButton("Next")
-        self.nextbutton.clicked.connect(self.next_callback)
-        self.buttonlayout.addWidget(self.nextbutton)
-
-        self.lastbutton = QtW.QPushButton("Last")
-        self.lastbutton.clicked.connect(self.last_callback)
-        self.buttonlayout.addWidget(self.lastbutton)
-
-    def update(self,data):
-        self.image.relimitimage()
-        if len(data.shape) == 3:
-            self.image_count = data.shape[0]
-            # self.image.setImage(numpy.transpose(data,axes=(0,2,1)),xvals=numpy.arange(self.image_count)+1)
-            self.image.old_update(numpy.transpose(data,axes=(0,2,1)))
-            self.controlbar.show()
-        else:
-            self.image_count = 1
-            # self.image.setImage(data.T)
-            self.image.old_update(data.T)
-            self.controlbar.hide()
-
-    def first_callback(self):
-        self.image.relimitimage()
-        self.image.image.setCurrentIndex(0)
-
-    def prev_callback(self):
-        currind = self.image.image.currentIndex
-        if currind==0:
-            self.last_callback()
-        else:
-            self.image.relimitimage()
-            self.image.image.jumpFrames(-1)
-
-    def next_callback(self):
-        currind = self.image.image.currentIndex
-        if currind>=self.image_count-1:
-            self.first_callback()
-        else:
-            self.image.relimitimage()
-            self.image.image.jumpFrames(+1)
-
-    def last_callback(self):
-        self.image.relimitimage()
-        self.image.image.setCurrentIndex(self.image_count-1)
-
-    def playpause_callback(self, event):
-        if event:
-            self.image.image.play(1)
-        else:
-            self.image.image.play(0)
 
 class CamSaver(QtW.QWidget):
     def __init__(self, get_one_func, get_multi_func=None, get_exp_func=None):
@@ -166,6 +72,7 @@ class CamSaver(QtW.QWidget):
         self.numberofimageslabel = QtW.QLabel("Number of Images:")
         self.numberofimages = QtW.QSpinBox()
         self.numberofimages.setValue(1)
+        self.numberofimages.setRange(0,1000)
         self.continouslabel = QtW.QLabel("Save Continuously:")
         self.continouscheck = QtW.QCheckBox()
 
@@ -182,7 +89,9 @@ class CamSaver(QtW.QWidget):
         self.exptime.setDecimals(10)
         self.exptime.setValue(0.5)
         self.getexptimebutton = QtW.QPushButton("Get Exposure Time")
-        self.getexptimebutton.clicked.connect(self.get_exp_time)
+        self.getexptimebutton.setCheckable(True)
+        self.getexptimebutton.setChecked(True)
+        # self.getexptimebutton.clicked.connect(self.get_exp_time)
 
         self.statuslabel = QtW.QLabel("Initialising...")
 
@@ -233,6 +142,10 @@ class CamSaver(QtW.QWidget):
         self.dir_path.mkdir(exist_ok=True)
         self.update_filenamepreview()
         self.statuslabel.setText("Ready")
+        
+        self.disp_timer = QtC.QTimer()
+        self.disp_timer.timeout.connect(self.update_display)
+        self.disp_timer.setInterval(1000)
 
     def get_exp_time(self):
         exp_time = self.get_exp_func()
@@ -243,19 +156,14 @@ class CamSaver(QtW.QWidget):
 
     def savebutton_callback(self,event):
         self.statuslabel.setText("Working...")
-        asyncio.run_coroutine_threadsafe(self.saveimages(),pydcam.EVENT_LOOP)
+        self.saveimages()
 
     def set_can_save(self,func):
         if callable(func):
             self.can_save = func
-
-    async def saveimages(self):
-        print("Saving images")
-        if not self.can_save():
-            self.statuslabel.setText("Can't save yet...")
-            return
-        self.now = get_now()
-        N = self.numberofimages.value()
+            
+    async def get_images(self):
+        N = self.N
         if N == 0:
             return
         elif N == 1:
@@ -277,14 +185,29 @@ class CamSaver(QtW.QWidget):
                 now = time.time()
             self.images = list_to_numpy(images)
             print("Got images")
-        self.statuslabel.setText(f"Got {N} images")
+
+    def saveimages(self):
+        print("Saving images")
+        if not self.can_save():
+            self.statuslabel.setText("Can't save yet...")
+            return
+        self.now = get_datetime_stamp()
+        self.N = self.numberofimages.value()
+        # run_in_background(self.get_images, callback=self.done_saveimages)
+        fut = LoopRunner.run_coroutine(self.get_images())
+        fut.add_done_callback(self.done_saveimages)
+        
+    def done_saveimages(self, event):
+        self.statuslabel.setText(f"Got {self.N} images")
         self.save_current_images(now=self.now)
 
     def save_current_images(self, event=None, now=None):
         if now is None:
-            now = get_now()
+            now = get_datetime_stamp()
         # timestamp = f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
-        timestamp = now.isoformat(timespec='seconds')[:19].replace(":","-")
+        timestamp = now#.isoformat(timespec='seconds')[:19].replace(":","-")
+        if self.getexptimebutton.isChecked():
+            self.get_exp_time()
         if self.savefitscheck.isChecked():
             self.save_many_fits(timestamp)
         if self.savehdf5check.isChecked():
@@ -296,15 +219,20 @@ class CamSaver(QtW.QWidget):
         self.update_filenamepreview()
 
     def update_filenamepreview(self):
-        now = get_now()
+        now = get_datetime_stamp()
         text = self.filenamepreview.text().split("\n")[0] + "\n"
         fname = self.filenameentry.text()
         if fname != "":
             fname += "_"
         self.fname = os.path.join(self.dir_path, fname)
-        fname = self.fname + now.isoformat(timespec='seconds')[:19].replace(":","-") #f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
+        fname = self.fname + now#.isoformat(timespec='seconds')[:19].replace(":","-") #f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
         text += fname
         self.filenamepreview.setText(text)
+
+    def update_display(self):
+        self.update_filenamepreview()
+        if self.getexptimebutton.isChecked():
+            self.get_exp_time()
 
     async def get_one(self):
         if self.get_one_callback is not None:
@@ -346,7 +274,10 @@ class CamSaver(QtW.QWidget):
         if self.images is not None:
 
             fname = self.fname + timestamp
-            fits.writeto(f'{fname}.fits', self.images)
+            hdr = fits.Header()
+            hdr["ExpTime"] = self.exptime.value()
+            hdr["DATE-OBS"] = timestamp
+            fits.writeto(f'{fname}.fits', self.images, header=hdr)
 
             # this old style was used before.....
             # hdul = fits.HDUList()
@@ -386,6 +317,15 @@ class CamSaver(QtW.QWidget):
             file.close()
         self.imdisplay.update(images)
         self.imdisplay.show()
+        
+    def showEvent(self, a0) -> None:
+        self.disp_timer.start(1000)
+        return super().showEvent(a0)
+    
+    def hideEvent(self, a0) ->None:
+        self.disp_timer.stop()
+        return super().hideEvent(a0)
+
 
 def test():
     def get_one():
