@@ -259,7 +259,7 @@ def test():
             print(e)
 
 if __name__ == "__main__":
-    simgui()
-    # arvgui()
+    # simgui()
+    arvgui()
     # test()
     # gui()
