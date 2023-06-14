@@ -11,11 +11,14 @@ from pydcam.api.dcamapi4 import DCAM_IDPROP
 from pydcam import open_config
 from pydcam.dcam_display import ImageUpdater
 from pydcam.utils.zmq_pubsub import zmq_reader, zmq_publisher
-from pydcam.utils.shmem import shmem_publisher, shmem_reader
+from pydcam.utils.shmem import shmem_publisher, shmem_reader, shmem_reader_async
 
 from pydcam.aravis_reader import AravisReader
 
+
 MAX_SIZE = 2304*2304*2
+
+HERE = Path(__file__).parent
 
 def gui():
     with LoopRunner() as EL:
@@ -73,6 +76,43 @@ def gui():
         if this_zmq: this_zmq.close()
     sys.exit(ret)
 
+
+def arvreader():
+    
+    config = open_config(HERE/".."/"config"/"EVT_config.toml")
+    
+    device_id = config["camera"]
+    
+    with LoopRunner() as EL:
+        # fname = None
+        # if len(sys.argv) > 1:
+        #     fname = Path(sys.argv[1]).resolve()
+
+        log = None
+
+        print("Looking for Camera, please wait....")
+
+        with OpenAravis(device_id) as dcam:
+            print("Got camera ", dcam)
+            if dcam is None:
+                print("No camera found, please connect")
+                sys.exit()
+            # dcam.prop_setdefaults()
+            # if fname is not None:
+            #     init_dict = open_config(fname)
+            #     if init_dict: dcam.prop_setfromdict(init_dict)
+
+            reader = AravisReader(dcam)
+
+            this_zmq = zmq_publisher()
+            # this_zmq = shmem_publisher(size=MAX_SIZE)
+
+            reader.register_callback(this_zmq.publish)
+            
+            reader.open_camera()
+    
+        if this_zmq: this_zmq.close()
+
 def arvgui():
     with LoopRunner() as EL:
         iDevice = "EVT-HB-1800SM-640002"
@@ -122,6 +162,52 @@ def arvgui():
         if this_zmq: this_zmq.close()
     sys.exit(ret)
 
+def sim():
+    with LoopRunner() as EL:
+        iDevice = 0
+
+        fname = None
+        if len(sys.argv) > 1:
+            fname = Path(sys.argv[1]).resolve()
+
+        reader = DCamSim()
+        print("DCAM sim made")
+        try:
+            print("Making publisher")
+            # this_zmq = zmq_publisher()
+            print("Publisher made")
+            this_zmq = shmem_publisher(size=MAX_SIZE)
+            # this_zmq = dfhs
+        except Exception as e:
+            print(e)
+            this_zmq = None
+        else:
+            print("registering callback")
+            reader.register_callback(this_zmq.publish)
+            print("Callback registered")
+
+        reader.open_camera()
+        
+        while 1:
+            try:
+                x = input("Type exp X, where X is the exposure time:\nor type config to configure from file:\n")
+                if x[:3] == "exp":
+                    try:
+                        et = float(x[4:])
+                    except Exception as e:
+                        print("wrong type for exposure time")
+                        continue
+                    reader.set_exposure(et)
+            except KeyboardInterrupt as e:
+                print("Finished with ctrl-C")
+                break
+
+        print("closing")
+        reader.quit()
+        
+        if this_zmq: this_zmq.close()
+    sys.exit()
+
 def simgui():
     with LoopRunner() as EL:
         iDevice = 0
@@ -145,8 +231,8 @@ def simgui():
         try:
             print("Making publisher")
             # this_zmq = zmq_publisher()
-            print("Publisher made")
             this_zmq = shmem_publisher(size=MAX_SIZE)
+            print("Publisher made")
             # this_zmq = dfhs
         except Exception as e:
             print(e)
@@ -225,29 +311,30 @@ def reader():
 def saver():
 
     # read_zmq = zmq_reader()
-    read_zmq = shmem_reader()
+    with LoopRunner() as EL:
+        read_shmem = shmem_reader_async()
 
-    app = QtW.QApplication(sys.argv)
-    this = CamSaver(read_zmq.oneshot,read_zmq.multishot)
-    this.show()
+        app = QtW.QApplication(sys.argv)
+        saver = CamSaver(read_shmem.oneshot, read_shmem.multishot)
+        saver.show()
 
-    with read_zmq:
-        sys.exit(app.exec())
+        with read_shmem:
+            sys.exit(app.exec())
 
 def display():
 
-    # this_zmq = zmq_reader(ratelimit=0.01)
-    this_zmq = shmem_reader(ratelimit=0.01)
+    with LoopRunner() as EL:
+        # this_zmq = zmq_reader(ratelimit=0.01)
+        read_shmem = shmem_reader_async(ratelimit=0.01)
 
-    app = QtW.QApplication(sys.argv)
-    this = ImageUpdater()
-    this.show()
+        app = QtW.QApplication(sys.argv)
+        display = ImageUpdater()
+        display.show()
 
-    this_zmq.register(this.update_trigger)
+        read_shmem.register(display.update_trigger)
 
-    with this_zmq:
-        sys.exit(app.exec())
-
+        with read_shmem:
+            sys.exit(app.exec())
 
 def test():
     import pydcam
@@ -259,7 +346,9 @@ def test():
             print(e)
 
 if __name__ == "__main__":
+    # sim()
+    display()
     # simgui()
-    arvgui()
+    # arvgui()
     # test()
     # gui()

@@ -30,7 +30,7 @@ class CallbackQueue(dict):
         for key in poplater:
             super().pop(key, None)
 
-class CallbackThread(threading.Thread):
+class CallbackThread:
     def __init__(self, startpaused=False, ratelimit=0):
         super().__init__()
 
@@ -45,6 +45,8 @@ class CallbackThread(threading.Thread):
         self.wait_while_paused.clear()
         self.wait_until_paused = threading.Event()
         self.wait_until_paused.set()
+        
+        self.thread = None
 
     def set_ratelimit(self, ratelimit):
         self.ratelimit = ratelimit
@@ -77,10 +79,18 @@ class CallbackThread(threading.Thread):
 
     def unpause(self):
         self.wait_while_paused.set()
+        
+    def start_cb_thread(self):
+        if self.thread is None:
+            self.thread = threading.Thread(target=self.run)
+            self.thread.start()
 
-    def stop(self):
-        self._go = False
-        self.unpause()
+    def stop_cb_thread(self):
+        if self.thread is not None:
+            self._go = False
+            self.unpause()
+            self.thread.join()
+            self.thread = None
 
     def register(self, func):
         fid = str(id(func))
@@ -127,7 +137,7 @@ class CallbackThread(threading.Thread):
         self.register(wrapper)
 
     def __enter__(self):
-        self.start()
+        self.start_cb_thread()
 
     def __exit__(self,*args):
-        self.stop()
+        self.stop_cb_thread()

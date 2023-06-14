@@ -5,3 +5,6 @@
 build
 dist
 *.spec
+
+doc/source/autoapi
+doc/source/automodules

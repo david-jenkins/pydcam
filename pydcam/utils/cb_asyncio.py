@@ -56,7 +56,6 @@ class CallbackQueue(dict):
 
 class CallbackCoroutine:
     def __init__(self, startpaused=False, ratelimit=0):
-        super().__init__()
 
         self.ratelimit = ratelimit
         self.now = time.perf_counter()
@@ -106,7 +105,7 @@ class CallbackCoroutine:
         self._pause = False
         self.wait_while_paused.set()
 
-    async def stop(self):
+    async def stop_cb_coro(self):
         await self.pause()
         self._go = False
         self.unpause()
@@ -158,14 +157,14 @@ class CallbackCoroutine:
             cnt[0] += 1
         self.register(wrapper)
 
-    async def start(self):
+    async def start_cb_coro(self):
         await self.run()
 
     def __enter__(self):
         # self.thread = threading.Thread(target=asyncio.run,args=(self.start(),))
         # self.thread.start()
-        self.runfut = LoopRunner.run_coroutine(self.start())
+        self.runfut = LoopRunner.run_coroutine(self.start_cb_coro())
 
     def __exit__(self,*args):
-        self.stop()
+        LoopRunner.run_coroutine(self.stop_cb_coro())
         # self.thread.join()

@@ -9,11 +9,13 @@ The interface to the Arvais API for my cam reader program
 
 import threading
 import time
-import gi
-
-gi.require_version ('Aravis', '0.8')
-
-from gi.repository import Aravis
+try:
+    import gi
+    gi.require_version ('Aravis', '0.8')
+    from gi.repository import Aravis
+except Exception as e:
+    print(e)
+    print("No Aravis available")
 
 
 def get_gc_features(genicam, name):

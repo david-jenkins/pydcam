@@ -1,5 +1,6 @@
 
-
+api = 'aravis'
+camera = 'EVT-HB-1800SM-640002'
 
 Width = 400
 Height = 400

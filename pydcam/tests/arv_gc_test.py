@@ -9,11 +9,14 @@
 #  LD_LIBRARY_PATH.
 
 import sys
-import gi
 
-gi.require_version ('Aravis', '0.8')
-
-from gi.repository import Aravis
+try:
+    import gi
+    gi.require_version ('Aravis', '0.8')
+    from gi.repository import Aravis
+except Exception as e:
+    print(e)
+    print("No Aravis available")
 
 Aravis.enable_interface ("Fake")
 
