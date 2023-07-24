@@ -227,6 +227,9 @@ class AravisReader:
         
     def set_frame_rate(self, fr):
         return self.acam.set_frame_rate(fr)
+    
+    def set_gain(self, ga):
+        return self.acam.set_gain(ga)
         
     def set_subarray(self, width, height, xoff, yoff):
         self.close_camera()

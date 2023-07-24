@@ -80,9 +80,10 @@ class ControlWindow(QtW.QWidget):
                 ]},
                 {'name':'Set Dimensions', 'type':'action', 'tip':'Use to set Window Parameters'},
                 {'name':'Set Fullframe', 'type':'action', 'tip':'Use to set Window Parameters'},
-                {'name':'Exposure Time (s)', 'type':'float', 'value':0, 'limits':[0.0001,10]},
-                {'name':'Exposure Time (ms)', 'type':'float', 'value':0, 'limits':[1,10000]},
-                {'name':'FrameRate (Hz)', 'type':'int', 'value':0, 'limits':[1,10000]}
+                {'name':'Exposure Time (s)', 'type':'float', 'value':0, 'limits':[0.000001,10]},
+                {'name':'Exposure Time (ms)', 'type':'float', 'value':0, 'limits':[0.001,10000]},
+                {'name':'FrameRate (Hz)', 'type':'int', 'value':0, 'limits':[1,10000]},
+                {'name':'Gain','type':'int','value':0,'limits':[0,8191]}
             ]},
             {'name':'Frame Rates','type':'group','children':[
                 {'name':'Camera Frame Rate', 'type':'float', 'value':0, 'readonly':True},
@@ -158,6 +159,7 @@ class ControlWindow(QtW.QWidget):
         self.paramgroup.param('Camera Setup').param('Exposure Time (s)').sigValueChanged.connect(self.setExposureTime)
         self.paramgroup.param('Camera Setup').param('Exposure Time (ms)').sigValueChanged.connect(self.setExposureTime)
         self.paramgroup.param('Camera Setup').param('FrameRate (Hz)').sigValueChanged.connect(self.setFrameRate)
+        self.paramgroup.param('Camera Setup').param('Gain').sigValueChanged.connect(self.setGain)
 
         self.installEventFilter(self)
 
@@ -266,6 +268,10 @@ class ControlWindow(QtW.QWidget):
     def setFrameRate(self,event):
         fr = self.paramgroup.param('Camera Setup').param('FrameRate (Hz)').value()
         self.camreader.set_frame_rate(fr)
+        
+    def setGain(self,event):
+        fr = self.paramgroup.param('Camera Setup').param('Gain').value()
+        self.camreader.set_gain(fr)
 
     def start_camera(self):
         if self.camreader.get_running():

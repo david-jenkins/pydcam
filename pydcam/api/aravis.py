@@ -187,6 +187,10 @@ class ArvCam:
     
     def set_frame_rate(self, fr):
         self.camhandle.set_integer("FrameRate", int(fr))
+        
+    def set_gain(self, ga):
+        if self.check_integer("Gain", int(ga)):
+            self.camhandle.set_integer("Gain", int(ga))
 
     def get_data(self, timeout=5):
         retval = self.newdata.wait(timeout)

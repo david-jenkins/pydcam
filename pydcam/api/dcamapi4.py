@@ -22,7 +22,7 @@ else:  # Linux
         def __getattr__(self, name):
             return FakeClass()
     __dll = FakeClass()
-    print("Linux and Mac have no driver :(")
+    print("No Hamamatsu driver available")
 
 
 # ==== declare constants ====
