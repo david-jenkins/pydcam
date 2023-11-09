@@ -1,0 +1,12 @@
+
+
+
+api = 'microgate'
+camera = 0 # dmaIdx
+name = "OCAM1"
+
+dmaIdx = 1
+width = 264
+height = 242
+bytespp = 2
+dtype = 'int16'

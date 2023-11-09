@@ -1,0 +1,16 @@
+
+
+
+api = 'aravis'
+camera = 'EVT-HB-1800SM-640002'
+
+[configuration]
+FrameRate = 10
+Exposure = 5000
+PixelFormat = "Mono8"
+Gain = 500
+TriggerMode = "Off"
+OffsetX = 336
+OffsetY = 428
+Width = 400
+Height = 400

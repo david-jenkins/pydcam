@@ -20,6 +20,11 @@ MAX_SIZE = 2304*2304*2
 
 HERE = Path(__file__).parent
 
+api_funcs = {
+    "aravis": (OpenAravis, AravisReader),
+    "hamamatsu": (OpenCamera, DCamReader)
+}
+
 def gui():
     with LoopRunner() as EL:
         iDevice = 0

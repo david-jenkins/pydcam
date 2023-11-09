@@ -1,18 +1,20 @@
 
+
+
+
 import asyncio
-from pydcam import LoopRunner
-from pydcam.utils import ParamInfo
+import time
 from pydcam.api import REGIONINFO
-from pydcam.api.aravis import ArvCam, print_info
+from pydcam.api.microgate import MGCam
+from pydcam.dcam_reader import pub_worker
+from pydcam.utils import LoopRunner, ParamInfo
 from pydcam.utils.asyncio_circ_buf import asyncio_buf
 
-from pydcam.dcam_reader import pub_worker
-import time
 
 class cam_worker:
-    def __init__(self, acam:ArvCam, dst_buf:asyncio_buf):
-        self.acam = acam
-        self.dst_buf = dst_buf
+    def __init__(self, camera:MGCam, dest_buf:asyncio_buf) -> None:
+        self.camera = camera
+        self.dst_buf = dest_buf
 
         self.go = True
         self._pause = True
@@ -24,20 +26,20 @@ class cam_worker:
         self.wait_while_paused.clear()
         self.wait_until_paused = asyncio.Event()
         self.wait_until_paused.set()
-    
+        
     def set_fps_cb(self,func):
         if callable(func):
             self.fps_cb = func
 
     async def run(self):
 
-        if self.acam is None:
+        if self.camera is None:
             return
-        print("satrting cam run")
+        print("starting cam run")
         lastupdate = time.time()
 
         while(self.go):
-            
+
             # check for pause flag
             if self._pause:
                 self.wait_until_paused.set()
@@ -49,13 +51,14 @@ class cam_worker:
             if not self.go:
                 print("ending cam thread")
                 return None
-            
-            buf = await LoopRunner.run_in_executor(self.acam.get_data)
+
+            buf = await LoopRunner.run_in_executor(self.camera.get_data)
             if buf is None:
                 continue
 
             try:
-                self.dst_buf.frombuffer(buf)
+                # self.dst_buf.frombuffer(buf, copy=True)
+                self.dst_buf.copy_numpy(buf,)
             except Exception as e:
                 print(e)
 
@@ -73,7 +76,7 @@ class cam_worker:
     async def pause(self):
         self.wait_while_paused.clear()
         self._pause = True
-        self.acam.cancel_get()
+        # self.camera.cancel_get()
         await self.wait_until_paused.wait()
         print("cam now paused...")
 
@@ -86,52 +89,45 @@ class cam_worker:
         await self.pause()
         self.go = False
         self.unpause()
-        print("cam stopped")
-
-class AravisReader:
-    def __init__(self, arvcam:ArvCam) -> None:
-        self.acam = arvcam
+        print("cam stopped") 
         
-        print_info(self.acam)
+        
+class MGReader:
+    def __init__(self, mgcam:MGCam):
+        self.cam_handle = mgcam
         
         self.thread_buffer_init()
         
         self.running = False
         
     def thread_buffer_init(self):
-        xoff, yoff, width, height = self.acam.get_region()
-        payload = self.acam.get_payload()
-        pxltype = self.acam.get_pixel_format()
-        exptime = self.acam.get_exposure_time_us()
-        frate = self.acam.get_frame_rate_hz()
-        
+        width, height = self.cam_handle.get_region()
+        dtype = self.cam_handle.get_dtype()
+
         shape = (int(height),int(width))
-        
-        dtype = "uint8" if pxltype == "Mono8" else "uint12"
-        
+                
         self.buffers = asyncio_buf(shape, 10, dtype)
         
         self.publisher = pub_worker(self.buffers)
-        self.camera = cam_worker(self.acam, self.buffers)
+        self.camera = cam_worker(self.cam_handle, self.buffers)
 
         self.pubfut = LoopRunner.run_coroutine(self.publisher.run())
         self.camfut = LoopRunner.run_coroutine(self.camera.run())
         
     def resize_thread_buffer(self):
 
-        xoff, yoff, width, height = self.acam.get_region()
-        pxltype = self.acam.get_pixel_format()
+        width, height = self.cam_handle.get_region()
+        dtype = self.cam_handle.get_dtype()
+        
         shape = (int(height),int(width))
-
-        dtype = "uint8" if pxltype == "Mono8" else "uint12"
 
         self.buffers.resize(shape, None, dtype)
         
     def open_camera(self):
 
         self.resize_thread_buffer()
-
-        err = self.acam.cap_start()
+        
+        err = self.cam_handle.capture_start()
         if err is False:
             print(f"Error in cap_start()")
         else:
@@ -157,8 +153,7 @@ class AravisReader:
         except Exception as e:
             print(e)
         # stop capture
-        self.acam.cap_stop()
-
+        self.cam_handle.capture_stop()
         self.running = False
 
         print( "PROGRAM PAUSE" )
@@ -194,20 +189,16 @@ class AravisReader:
             print(res)
         finally:
             print("cam finished")
-
-        # release buffer
-        print("Releasing buffer...")
-        if self.running:
-            self.acam.cap_stop()
-        self.running=False
+            
+        self.cam_handle.capture_stop()
 
         print( "PROGRAM END\n" )
         
     def get_info(self):
-        return self.acam.get_info() 
+        return self.cam_handle.get_info() 
 
     def get_info_detail(self):
-        return self.acam.get_info_detail()
+        return self.get_info()
         
     async def get_image(self):
         return await self.publisher.oneshot()
@@ -219,105 +210,52 @@ class AravisReader:
         return bool(self.running)
     
     def get_exposure(self):
+        return 0
         """In seconds"""
-        return self.acam.get_exposure_time_us()/1000000.
+        return self.cam_handle.get_exposure_time()
     
     def set_exposure(self, exp_time):
+        return
         """In seconds"""
-        return self.acam.set_exposure_us(exp_time*1e6)
+        return self.cam_handle.set_exposure(exp_time)
         
     def set_frame_rate(self, fr):
-        return self.acam.set_frame_rate_hz(fr)
+        return
+        return self.cam_handle.set_frame_rate(fr)
     
     def set_gain(self, ga):
-        return self.acam.set_gain(ga)
+        return
+        return self.cam_handle.set_gain(ga)
         
     def set_subarray(self, width, height, xoff, yoff):
+        return
         self.close_camera()
-        self.acam.set_region(xoff,yoff,width,height)
+        self.cam_handle.set_region(xoff,yoff,width,height)
         self.open_camera()
         
     def set_subarray_pos(self, hpos, vpos):
-        region = self.acam.get_region()
+        region = self.cam_handle.get_region()
         self.set_subarray(region.width,region.height,hpos,vpos)
-
+        
     def set_publish(self,value=True):
         self.publisher.set_zmq(value)
-
+    
     def get_window_info_dict(self):
-        keys = [ REGIONINFO.Width, REGIONINFO.OffsetX, REGIONINFO.Height, REGIONINFO.OffsetY, REGIONINFO.Exposure, REGIONINFO.Exposure, REGIONINFO.FrameRate, REGIONINFO.FrameRate]
-        ids = [ "Width", "OffsetX", "Height", "OffsetY", "Exposure", "ExposureTime", "FrameRate", "AcquisitonFrameRate"]
-        values = {}
-        for tid,key in zip(ids,keys):
-            try:
-                feature = self.acam.get_feature(tid)
-            except Exception as e:
-                print(e)
-            else:
-                values[key] = ParamInfo(feature.value,feature.min,feature.max,feature.inc)
-        exp = values[REGIONINFO.Exposure]
-        values[REGIONINFO.Exposure] = ParamInfo(exp.value/1e6, exp.min/1e6, exp.max/1e6, exp.step/1e6)
+        values = {
+            REGIONINFO.Width : ParamInfo(self.cam_handle.config['width']),
+            REGIONINFO.OffsetX : ParamInfo(),
+            REGIONINFO.Height : ParamInfo(self.cam_handle.config['height']),
+            REGIONINFO.OffsetY : ParamInfo(),
+            REGIONINFO.Exposure : ParamInfo(),
+            REGIONINFO.FrameRate : ParamInfo(),
+        }
         return values
-
+    
     def get_window_info(self):
         return list(self.get_window_info_dict().values())
-
+    
     def register_callback(self, func):
         return self.publisher.register(func)
 
     def deregister_callback(self, fid):
         self.publisher.deregister(fid)
-        
-        
-        
-if __name__ == "__main__":
-    import sys
-    from pydcam import LoopRunner
-    from pathlib import Path
-    from pydcam import open_config
-    from pydcam.api import OpenAravis
-    from pydcam.utils.zmq_pubsub import zmq_publisher
-    from pydcam.utils.shmem import shmem_publisher
-    iDevice = "EVT-HB-1800SM-640002"
-
-    fname = None
-    if len(sys.argv) > 1:
-        fname = Path(sys.argv[1]).resolve()
-
-
-    with LoopRunner() as EL:
-        with OpenAravis(iDevice) as dcam:
-
-
-            dcam.prop_set_defaults()
-
-            camreader = AravisReader(dcam)
-            # this_zmq = zmq_publisher()
-            this_zmq = shmem_publisher(size=1600*1096)
-            fid = camreader.register_callback(this_zmq.publish)
-
-            camreader.open_camera()
-
-            while 1:
-                try:
-                    x = input("Type exp X, where X is the exposure time:\nor type config to configure from file:\n")
-                    if x[:3] == "exp":
-                        try:
-                            et = float(x[4:])
-                        except Exception as e:
-                            print("wrong type for exposure time")
-                            continue
-                        camreader.set_exposure(et)
-                    elif x[:6] == "config":
-                        init_dict = open_config()
-                        if init_dict: dcam.prop_setfromdict(init_dict)
-                except KeyboardInterrupt as e:
-                    print("Finished with ctrl-C")
-                    break
-
-            print("closing")
-            camreader.deregister_callback(fid)
-            camreader.quit()
-            this_zmq.close()
-            
-    print("EXITING")

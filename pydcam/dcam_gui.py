@@ -278,8 +278,10 @@ class ControlWindow(QtW.QWidget):
             return
         self.camreader.open_camera()
         camera_params = self.camreader.get_info()
-        self.paramgroup.param('Camera Information').param('Camera Model').setValue(camera_params["DeviceModelName"])
-        self.paramgroup.param('Camera Information').param('Serial Number').setValue(camera_params["DeviceSerialNumber"])
+        print(camera_params)
+        if camera_params is not None:
+            self.paramgroup.param('Camera Information').param('Camera Model').setValue(camera_params["DeviceModelName"])
+            self.paramgroup.param('Camera Information').param('Serial Number').setValue(camera_params["DeviceSerialNumber"])
         self.set_window_info()
 
     def set_window_info(self):

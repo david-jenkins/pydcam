@@ -15,6 +15,8 @@ try:
 except ModuleNotFoundError as e:
     print(e)
     BeatWave = False
+except OSError as e:
+    BeatWave = False
     
 BeatWave = False
 USE_SOUND = bool(BeatWave)
@@ -229,21 +231,32 @@ class ImageSigCapture():
 class MyImageView(pg.ImageView):
     def __init__(self, parent=None, name="ImageView", view=None, imageItem=None, levelMode='mono', discreteTimeLine=False, roi=None, normRoi=None, *args):
         super().__init__(parent, name, view, imageItem, levelMode, discreteTimeLine, roi, normRoi, *args)
-        self._use_bg = False
         self.bgAction = QtW.QAction("Use background", self.menu)
         self.bgAction.setCheckable(True)
         self.bgAction.setChecked(False)
-        self.bgAction.toggled.connect(self.bgToggled)
         
-    def bgToggled(self, action):
-        self._use_bg = action
-        
+        self.logscaleAction = QtW.QAction("Use logscale", self.menu)
+        self.logscaleAction.setCheckable(True)
+        self.logscaleAction.setChecked(False)
+
+        self.crossAction = QtW.QAction("Add cross", self.menu)
+        self.crossAction.setCheckable(True)
+        self.crossAction.setChecked(False)
+
     def useBg(self):
-        return self._use_bg
+        return self.bgAction.isChecked()
+
+    def logscale(self):
+        return self.logscaleAction.isChecked()
+    
+    def addcross(self):
+        return self.crossAction.isChecked()
 
     def buildMenu(self):
         super().buildMenu()
         self.menu.addAction(self.bgAction)
+        self.menu.addAction(self.logscaleAction)
+        self.menu.addAction(self.crossAction)
 
 class ImageDisplayUI(QtW.QWidget):
     def __init__(self,parent=None):
@@ -449,10 +462,33 @@ class ImageDisplay(ImageDisplayUI):
         self.worker_thread = None
         
         self.relimit = True
+        self.usingcross = False
         
         self.singlePane()
+        
+        self.viewport = self.image.ui.graphicsView.viewport()
+        
+        self.viewport.installEventFilter(self)
 
         self.update_once(numpy.zeros((2,2)))
+        
+    def eventFilter(self,obj,event):
+        if event.type() == QtC.QEvent.MouseMove and obj is self.viewport:
+            self.mousemove(event)
+        return super().eventFilter(obj, event)
+            
+    def mousemove(self, event):
+        pos = event.pos()
+        if self.image.getImageItem().sceneBoundingRect().contains(pos):
+            mousePoint = self.image.getView().mapSceneToView(pos)
+            px = int(mousePoint.x())
+            py = int(mousePoint.y())
+            ipos = self.image.getImageItem().pos()
+            px = int(px-ipos[0])
+            py = int(py-ipos[1])
+            if self.im_data is not None:
+                # self.sigMouseMove.emit(px,py,self.im_data[px,py])
+                print(f"X = {px+1}, Y = {py+1}, value={self.im_data[py,px]}")
 
     def start_worker_thread(self):
         if self.worker_thread is None or not self.worker_thread.is_alive():
@@ -558,7 +594,7 @@ class ImageDisplay(ImageDisplayUI):
     def process_data(self):
         data = self.data
         if len(self.data.shape)==3:
-            data = data[0]
+            data = data[0].astype(float)
         bg = None
         if self.image.useBg() and self.control is not None:
             bg = self.control.get_background()
@@ -567,6 +603,9 @@ class ImageDisplay(ImageDisplayUI):
         else:
             self.image.bgAction.setChecked(False)
             self.im_data = self.data
+        if self.image.logscale():
+            c = 255/numpy.log(1+numpy.amax(self.im_data))
+            self.im_data = c*numpy.log(self.im_data+1)
         if self.roibutton.isChecked():
             self.roi_data = numpy.fliplr(self.roi.getArrayRegion(data, self.image.imageItem))
             data = self.roi_data
@@ -600,6 +639,21 @@ class ImageDisplay(ImageDisplayUI):
             self.isocurve.setData(self.iso_data)
         if self.showsatbutton.isChecked():
             self.sat_image.setImage(self.sat_data)
+        if self.image.addcross():
+            if not self.usingcross:
+                print("setting cross")
+                
+                self.horline = pg.InfiniteLine(self.im_data.shape[0]//2,0)
+                self.image.getView().addItem(self.horline)
+                self.verline = pg.InfiniteLine(self.im_data.shape[1]//2,90)
+                self.image.getView().addItem(self.verline)
+            self.usingcross = True
+        else:
+            if self.usingcross:
+                print("unsetting cross")
+                self.image.getView().removeItem(self.horline)
+                self.image.getView().removeItem(self.verline)
+            self.usingcross = False
 
     def old_update(self, data):
         self.data = data
@@ -773,8 +827,16 @@ class ImageViewer(QtW.QWidget):
         self.lastbutton = QtW.QPushButton("Last")
         self.lastbutton.clicked.connect(self.last_callback)
         self.buttonlayout.addWidget(self.lastbutton)
+        
+        self.data = None
+        self.image.image.logscaleAction.toggled.connect(self._update)
+        
+    def _update(self):
+        if self.data is not None:
+            self.update(self.data)
 
     def update(self,data):
+        self.data = data
         self.image.relimitimage()
         if len(data.shape) == 3:
             self.image_count = data.shape[0]

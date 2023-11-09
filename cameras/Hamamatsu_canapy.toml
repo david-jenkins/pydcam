@@ -1,0 +1,5 @@
+
+
+
+api = 'hamamatsu'
+camera = 0 # iDevice number, should always be 0 with one attached camera

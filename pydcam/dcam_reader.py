@@ -507,9 +507,19 @@ class DCamReader():
 
     def reset_buffer_head(self):
         self.buffers.reset_head()
+        
+class OpenSim():
+    def __init__(self, iDevice):
+        self.iDevice = iDevice
+
+    def __enter__(self):
+        return True
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
 
 class DCamSim():
-    def __init__(self):
+    def __init__(self, cam_handle=None):
 
         # set these as default values
         self.exposure = 1.0

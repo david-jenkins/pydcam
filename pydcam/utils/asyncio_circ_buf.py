@@ -57,6 +57,7 @@ class asyncio_buf():
 
     def copy_numpy(self, array:numpy.ndarray):
         if array.shape != self.bufs.shape[1:]:
+            print(f"{array.shape=} != {self.bufs.shape[1:]=}")
             print("arr wrong shape")
             return None
         self.last_filled = (self.last_filled + 1)%self.count
@@ -65,9 +66,10 @@ class asyncio_buf():
         self.bufs[self.last_filled] = numpy.copy(array)
         self.wait.set()
         
-    def frombuffer(self, buffer):
+    def frombuffer(self, buffer, copy=False):
         # print("Getting from buffer!")
         if len(buffer) < self.size:
+            print(f"{len(buffer)=} < {self.size=}")
             print("Not enough buffer")
             return None
         # elif len(buffer) > self.size:
@@ -78,6 +80,7 @@ class asyncio_buf():
         self.unread_bufs = (self.unread_bufs + 1)
         inarr = numpy.frombuffer(buffer, dtype=self.dtype,count=self.size)
         inarr.shape = self.shape
+        if copy: inarr = inarr.copy()
         self.bufs[self.last_filled] = inarr
         self.wait.set()
 

@@ -1,7 +1,9 @@
 
 from enum import IntEnum
 from pydcam.api.dcam import Dcamapi, Dcam
-from pydcam.api.aravis import ArvCam
+from pydcam.api.aravis import ArvCam, Aravis
+from pydcam.api.microgate import MGCam
+
 class OpenCamera:
     def __init__(self, iDevice):
         self.iDevice = iDevice
@@ -26,17 +28,30 @@ class OpenCamera:
         Dcamapi.uninit()
         return False
 
-
 class OpenAravis:
-    def __init__(self, iDevice):
-        self.iDevice = iDevice
+    def __init__(self, device_config):
+        self.device_config = device_config
 
     def __enter__(self):
-        self.acam = ArvCam(self.iDevice)
+        self.acam = ArvCam(self.device_config)
         if self.acam.dev_open() is False:
             print("No Camera available")
             return None
         return self.acam
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+class OpenMG:
+    def __init__(self, device_config):
+        self.device_config = device_config
+
+    def __enter__(self):
+        self.cam = MGCam(self.device_config)
+        if self.cam.device_open() is False:
+            print("No Camera available")
+            return None
+        return self.cam
 
     def __exit__(self, exc_type, exc_value, traceback):
         return False

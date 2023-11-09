@@ -8,7 +8,7 @@ from typing import Union
 
 import numpy
 
-ParamInfo = namedtuple("ParamInfo", ["value", "min", "max", "step"])
+ParamInfo = namedtuple("ParamInfo", ["value", "min", "max", "step"],defaults=(0,0,0,0))
 
 def get_datetime_stamp(microseconds=False, split=False) -> Union[str,tuple]:
     """This function should be used for generating all text timestamps to ensure consistency

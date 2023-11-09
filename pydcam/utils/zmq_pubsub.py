@@ -43,7 +43,18 @@ class zmq_publisher():
     def __init__(self, ip="127.0.0.1", port=5556, topic='hamamatsu'):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
-        self.socket.bind(f"tcp://{ip}:{port}")
+        connected = False
+        for i in range(5):
+            try:
+                self.socket.bind(f"tcp://{ip}:{port}")
+            except Exception as e:
+                print(e)
+                port += 1
+            else:
+                connected = True
+                break
+        if not connected:
+            raise ValueError("Can't open ports")
         self.topic = topic.encode()
 
     def publish(self, data):

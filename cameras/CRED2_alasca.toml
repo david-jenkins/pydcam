@@ -1,0 +1,12 @@
+
+
+
+api = 'microgate'
+camera = 3 # dmaIdx
+name = "CRED2Lite"
+
+dmaIdx = 3
+width = 256 #x
+height = 240 #y
+bytespp = 2
+dtype = 'int16'

@@ -4,6 +4,8 @@
 # see orca_raw_properties.toml for more information about the parameters
 # the keys need to match the enums in DCAM_IDPROP in dcamapi4.py
 
+api = "hamamatsu"
+camera = 0
 
 BINNING = 1.0 # no binning
 DEFECTCORRECT_MODE = 2.0 # on? I guess
