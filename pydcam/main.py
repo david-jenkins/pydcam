@@ -5,7 +5,8 @@ import sys
 from pydcam.api import OpenAravis, OpenCamera, OpenMG
 from pydcam.aravis_reader import AravisReader
 from pydcam.dcam_gui import ConsoleLog, ControlWindow
-from pydcam.dcam_reader import DCamReader, DCamSim, OpenSim
+from pydcam.dcam_reader import DCamReader
+from pydcam.sim_reader import DCamSim, OpenSim
 from pydcam.mg_reader import MGReader
 from pydcam.utils import LoopRunner
 from pydcam.utils.shmem import shmem_publisher

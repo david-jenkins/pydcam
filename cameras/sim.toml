@@ -3,3 +3,12 @@
 
 api = "simulation"
 camera = 0
+
+
+exposure = 0.01
+hsize = 242
+vsize = 264
+hpos = 0
+vpos = 0
+
+mode = 2.0

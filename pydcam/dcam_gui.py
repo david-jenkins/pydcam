@@ -181,7 +181,7 @@ class ControlWindow(QtW.QWidget):
         self.ims = await self.camreader.get_images(nimages)
     
     def take_background_done(self, future):
-        imarray = numpy.zeros((10,*self.ims[0].shape),dtype=self.ims[0].dtype)
+        imarray = numpy.zeros((len(self.ims),*self.ims[0].shape),dtype=self.ims[0].dtype)
         for i,im in enumerate(self.ims):
             imarray[i] = im
         print(imarray)

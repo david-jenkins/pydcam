@@ -163,7 +163,7 @@ class MGCam:
         }
         return values
 
-    def get_data(self, timeout=5):
+    def get_data(self, timeout=3):
         retval = self.newdata.wait(timeout)
         self.newdata.clear()
         if retval and self.not_cancelled:
@@ -224,6 +224,8 @@ class MGCam:
     def capture_stop(self):
         if self.capture_thread is not None and self.capture_thread.is_alive():
             self.go = False
+            self.not_cancelled = False
+            self.newdata.set()
             self.capture_thread.join()
     
     # def set_properties_defaults(self):
